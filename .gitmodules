@@ -1,0 +1,3 @@
+[submodule "bootrom/external/bootrom/external/mbedtls"]
+	path = bootrom/external/bootrom/external/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
