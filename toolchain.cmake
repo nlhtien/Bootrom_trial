@@ -1,0 +1,20 @@
+# toolchain.cmake
+
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_PROCESSOR arm)
+
+set(MY_TOOLCHAIN_PATH "C:/prj_cursor/BootROM/tools/gcc/bin")
+
+set(CMAKE_C_COMPILER   "${MY_TOOLCHAIN_PATH}/arm-none-eabi-gcc.exe" CACHE STRING "" FORCE)
+set(CMAKE_CXX_COMPILER "${MY_TOOLCHAIN_PATH}/arm-none-eabi-g++.exe" CACHE STRING "" FORCE)
+set(CMAKE_ASM_COMPILER "${MY_TOOLCHAIN_PATH}/arm-none-eabi-gcc.exe" CACHE STRING "" FORCE)
+
+set(CMAKE_OBJCOPY      "${MY_TOOLCHAIN_PATH}/arm-none-eabi-objcopy.exe" CACHE STRING "" FORCE)
+set(CMAKE_OBJDUMP      "${MY_TOOLCHAIN_PATH}/arm-none-eabi-objdump.exe" CACHE STRING "" FORCE)
+set(CMAKE_SIZE         "${MY_TOOLCHAIN_PATH}/arm-none-eabi-size.exe" CACHE STRING "" FORCE)
+
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
