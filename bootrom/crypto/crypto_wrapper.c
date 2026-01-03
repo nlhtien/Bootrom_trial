@@ -13,6 +13,7 @@
 #include "mbedtls/rsa.h"
 #include "mbedtls/pk.h"
 #include "mbedtls/platform.h"
+#include "mbedtls/platform_util.h"
 #include "mbedtls/memory_buffer_alloc.h"
 #include <string.h>
 
@@ -216,3 +217,4 @@ int crypto_set_public_key(const uint8_t *key_der, size_t key_len)
     
     return 0;
 }
+

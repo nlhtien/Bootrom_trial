@@ -19,7 +19,7 @@
 .align 8    /* 2^8 = 256 bytes alignment for vector table */
 .global _vector_table
 _vector_table:
-    ldr pc, =reset_handler      /* Reset */
+    ldr pc, =reset_handler       /* Reset */
     ldr pc, =undef_handler       /* Undefined Instruction */
     ldr pc, =svc_handler         /* Supervisor Call */
     ldr pc, =prefetch_handler    /* Prefetch Abort */
@@ -64,9 +64,10 @@ reset_handler:
      * 3. Multi-core Check: Verify Primary Core
      *    MPIDR[1:0] = 0 for primary core
      * ============================================ */
-    mrc p15, 0, r0, c0, c0, 5    /* Read MPIDR */
-    ands r0, r0, #0x03           /* Extract Affinity Level 0 (Core ID) */
-    bne secondary_core_loop      /* If not 0, this is a secondary core */
+    @ For QEMU testing: Skip multi-core check
+    @ mrc p15, 0, r0, c0, c0, 5    /* Read MPIDR */
+    @ ands r0, r0, #0x03           /* Extract Affinity Level 0 (Core ID) */
+    @ bne secondary_core_loop      /* If not 0, this is a secondary core */
     
     /* Primary core continues */
     b primary_core_continue

@@ -21,7 +21,9 @@ Production-ready Boot ROM project for ARM Cortex-R5F processor with Secure Boot 
 
 ## Directory Structure
 
-'''
+## Directory Structure
+
+```
 bootrom/
 ├── arch/arm/r5f/              # Architecture-specific code
 │   ├── startup.S              # Stage 1 & 2: Startup code, vector table, stack setup
@@ -41,7 +43,8 @@ bootrom/
 │   ├── platform.c/h           # Platform functions (MPU, TCM, cache setup)
 │   └── platform_mbedtls.h     # MbedTLS platform integration
 └── main.c                     # Entry point (Stage 3 & 4 orchestration)
-'''
+...
+```
 
 ## 4-Stage Boot Flow
 
@@ -116,11 +119,21 @@ bootrom/
 - CMake (3.15 or later - 4.12)
 - MbedTLS library (should be placed in 'external/mbedtls/')
 
+```bash
+sudo apt update
+sudo apt install git make cmake gcc-arm-none-eabi binutils-arm-none-eabi build-essential
+```
+
 ### Build Steps
 
-'''bash
-cmake -B build -G "Ninja" -DCMAKE_TOOLCHAIN_FILE=C:/prj_cursor/BootROM/toolchain.cmake && cmake --build build
-'''
+```bash
+mkdir build && cd build
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain.cmake -DCMAKE_BUILD_TYPE=Debug ..
+make
+or cmake --build .
+eg: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_BUILD_TYPE=Debug && cmake --build build
+eg: rm -rf build && mkdir build && cd build && cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain.cmake -DCMAKE_BUILD_TYPE=Debug .. && make
+```
 
 Output files:
 - 'bootrom.elf' - ELF executable
@@ -154,7 +167,7 @@ Output files:
 
 The boot image must have the following header structure:
 
-'''c
+```c
 typedef struct {
     uint32_t magic;              // 0x5442524D ("MBRT")
     uint32_t version;            // Header version
@@ -166,7 +179,7 @@ typedef struct {
     uint8_t  iv[16];             // AES IV
     uint8_t  signature[256];     // RSA-2048 or ECC signature
 } image_header_t;
-'''
+```
 
 ## Configuration
 

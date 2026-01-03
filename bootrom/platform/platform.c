@@ -206,3 +206,14 @@ void platform_delay_ms(uint32_t ms)
 {
     platform_delay_us(ms * 1000);
 }
+
+/**
+ * @brief Stub for _exit (bare-metal, no exit)
+ */
+void _exit(int status)
+{
+    (void)status;
+    while (1) {
+        /* Infinite loop on exit */
+    }
+}

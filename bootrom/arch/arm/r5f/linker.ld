@@ -1,31 +1,35 @@
 /**
  * @file linker.ld
  * @brief Linker Script for ARM Cortex-R5F BootROM
- * 
- * Memory Layout:
+ * * Memory Layout:
  * - BOOT_ROM: Boot ROM region (read-only code and data)
- * - OCRAM: On-Chip RAM for stacks, heap, and runtime data
- * - TCM: Tight Coupled Memory for stacks, heap, and runtime data
+ * - OCRAM:    On-Chip RAM / DDR (Large data, buffers, heap)
+ * - TCM:      Tightly Coupled Memory (Critical stacks for performance)
  */
 
 ENTRY(reset_handler)
 
 MEMORY
 {
-    BOOT_ROM (rx) : ORIGIN = 0x00000000, LENGTH = 64K
-    /* OCRAM (rwx) : ORIGIN = 0x08000000, LENGTH = 64K */
-    /* DTCM */
-    TCM (rwx) : ORIGIN = 0x00200000, LENGTH = 64K
+    /* ROM: Boot code storage (256KB) */
+    BOOT_ROM (rx) : ORIGIN = 0x00000000, LENGTH = 256K
+    
+    /* OCRAM: Increased to 1MB to hold MbedTLS buffers (Decrypted Image ~256KB) */
+    /* Note: Address 0x08000000 is typical for QEMU/SoC RAM */
+    OCRAM (rwx)   : ORIGIN = 0x08000000, LENGTH = 1M
+    
+    /* TCM: Used for high-speed stacks (64KB) */
+    TCM (rwx)     : ORIGIN = 0x00200000, LENGTH = 64K
 }
 
-/* Stack sizes */
-_irq_stack_size = 0x400;
-_fiq_stack_size = 0x400;
-_svc_stack_size = 0x400;
-_abt_stack_size = 0x400;
-_und_stack_size = 0x400;
-_sys_stack_size = 0x1000;
-_heap_size = 0x1000;
+/* Stack sizes configuration */
+_irq_stack_size = 0x400;   /* 1KB */
+_fiq_stack_size = 0x400;   /* 1KB */
+_svc_stack_size = 0x400;   /* 1KB */
+_abt_stack_size = 0x400;   /* 1KB */
+_und_stack_size = 0x400;   /* 1KB */
+_sys_stack_size = 0x1000;  /* 4KB */
+_heap_size = 0x1000;       /* 4KB */
 
 SECTIONS
 {
@@ -39,9 +43,9 @@ SECTIONS
     .text :
     {
         _text_start = .;
-        *(.text.reset)
-        *(.text*)
-        *(.rodata*)
+        *(.text.reset)   /* Reset handler first */
+        *(.text*)        /* All other code */
+        *(.rodata*)      /* Read-only data */
         . = ALIGN(4);
         _text_end = .;
     } > BOOT_ROM
@@ -59,17 +63,19 @@ SECTIONS
         __exidx_end = .;
     } > BOOT_ROM
 
-    /* Initialized data (stored in ROM, copied to TCM at startup) */
+    /* Initialized data (Stored in ROM, Copied to OCRAM at startup) */
+    /* MOVED TO OCRAM to save TCM space */
     _data_load_addr = LOADADDR(.data);
-    .data : AT(_text_end)
+    .data : AT(ADDR(.ARM.exidx) + SIZEOF(.ARM.exidx))
     {
         _data_start = .;
         *(.data*)
         . = ALIGN(4);
         _data_end = .;
-    } > TCM
+    } > OCRAM 
 
     /* Uninitialized data (BSS) */
+    /* MOVED TO OCRAM: This contains the large MbedTLS buffers */
     .bss :
     {
         _bss_start = .;
@@ -77,9 +83,9 @@ SECTIONS
         *(COMMON)
         . = ALIGN(4);
         _bss_end = .;
-    } > TCM
+    } > OCRAM
 
-    /* Stacks in TCM */
+    /* Stacks remain in TCM for maximum speed */
     .stacks (NOLOAD) :
     {
         . = ALIGN(8);
@@ -121,7 +127,7 @@ SECTIONS
         . = ALIGN(8);
     } > TCM
 
-    /* Heap section */
+    /* Heap section (Moved to OCRAM) */
     .heap (NOLOAD) :
     {
         . = ALIGN(8);
@@ -129,11 +135,17 @@ SECTIONS
         . += _heap_size;
         _heap_end = .;
         . = ALIGN(8);
-    } > TCM
+    } > OCRAM
 
-    /* Ensure TCM doesn't overflow */
+    /* Sanity Checks */
+    
+    /* 1. Ensure TCM (Stacks) doesn't overflow */
     _TCM_end = ORIGIN(TCM) + LENGTH(TCM);
-    ASSERT(_heap_end <= _TCM_end, "TCM overflow detected!")
+    ASSERT(_stack_top <= _TCM_end, "Error: TCM Stack overflow detected!")
+
+    /* 2. Ensure OCRAM (Data/BSS/Heap) doesn't overflow */
+    _OCRAM_end = ORIGIN(OCRAM) + LENGTH(OCRAM);
+    ASSERT(_heap_end <= _OCRAM_end, "Error: OCRAM Data overflow detected!")
 
     /* Discard sections */
     /DISCARD/ :
