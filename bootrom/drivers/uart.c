@@ -1,10 +1,31 @@
 /**
  * @file uart.c
- * @brief UART Driver Implementation (Stub)
+ * @brief UART Driver Implementation (with QEMU semihosting support)
  */
 
 #include "uart.h"
 #include "platform/platform.h"
+
+/* For QEMU semihosting support */
+#define SEMIHOSTING_SVC 0xAB
+#define SYS_WRITEC 0x03  /* Write character to console */
+#define SYS_WRITE0 0x04  /* Write string to console */
+
+/* Semihosting function for QEMU */
+static inline int semihosting_call(int operation, void *parameter)
+{
+    int result;
+    __asm__ volatile (
+        "mov r0, %1\n"
+        "mov r1, %2\n"
+        "svc %3\n"
+        "mov %0, r0\n"
+        : "=r" (result)
+        : "r" (operation), "r" (parameter), "i" (SEMIHOSTING_SVC)
+        : "r0", "r1", "memory"
+    );
+    return result;
+}
 
 /* UART register definitions (stub - actual values depend on SoC) */
 typedef struct {
@@ -42,24 +63,34 @@ int uart_init(uint32_t baudrate)
 
 void uart_putchar(char c)
 {
+#ifdef QEMU_SEMIHOSTING
+    /* Use semihosting for QEMU output */
+    semihosting_call(SYS_WRITEC, &c);
+#else
+    /* Hardware UART implementation */
     /* Wait until transmit FIFO is not full */
     while (UART_REG(FR) & UART_FR_TXFF);
     
     /* Send character */
     UART_REG(DR) = c;
+#endif
     
     /* If newline, send carriage return too */
     if (c == '\n') {
-        while (UART_REG(FR) & UART_FR_TXFF);
-        UART_REG(DR) = '\r';
+        uart_putchar('\r');
     }
 }
 
 void uart_puts(const char *str)
 {
+#ifdef QEMU_SEMIHOSTING
+    /* Use semihosting for QEMU output */
+    semihosting_call(SYS_WRITE0, (void *)str);
+#else
     while (*str) {
         uart_putchar(*str++);
     }
+#endif
 }
 
 char uart_getchar(void)

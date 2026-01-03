@@ -19,6 +19,12 @@ set(CPU_FLAGS "-mcpu=cortex-r5 -mthumb -mfloat-abi=hard -mfpu=vfpv3-d16")
 # -ffunction-sections -fdata-sections: Allow linker to remove unused code
 set(COMMON_FLAGS "${CPU_FLAGS} -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -fno-builtin -fno-strict-aliasing")
 
+# Option for QEMU semihosting support
+option(ENABLE_QEMU_SEMIHOSTING "Enable semihosting for QEMU UART output" OFF)
+if(ENABLE_QEMU_SEMIHOSTING)
+    add_compile_definitions(QEMU_SEMIHOSTING)
+endif()
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # Debug Build: No optimization (-O0), full debug symbols
     add_compile_options(-g3 -O0 -DDEBUG)
