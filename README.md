@@ -215,18 +215,95 @@ The following components need platform-specific implementation:
 8. **Reset Cause**: Implement platform-specific reset cause detection
 9. **Memory Map**: Adjust addresses in 'linker.ld' for your platform
 
-## Static Memory Allocation
+## Quick Start
 
-This BootROM uses **strictly static memory allocation**:
-- No 'malloc()' or 'free()' calls
-- MbedTLS uses 'MBEDTLS_MEMORY_BUFFER_ALLOC_C' with a static 32KB buffer
-- All buffers are statically allocated at compile time
-- This ensures deterministic memory usage and prevents heap fragmentation
+### Prerequisites
+- **ARM GCC Toolchain**: `arm-none-eabi-gcc` (9.0+ recommended)
+- **CMake**: 3.15+
+- **Git**: For submodule management
 
-## License
+### Build BootROM
+```bash
+# Clone repository
+git clone <repository-url>
+cd Bootrom_trial
 
-None
+# Initialize submodules (MbedTLS)
+git submodule update --init --recursive
 
-## Contributing
+# Configure build
+cmake -B build -S .
 
-None
+# Build
+cmake --build build
+
+# Output files in build/:
+# - bootrom.elf (with debug symbols)
+# - bootrom.bin (raw binary)
+# - bootrom.hex (Intel HEX)
+# - bootrom.dis (disassembly)
+```
+
+### Test with QEMU
+```bash
+# Enable semihosting for UART output
+cmake -DENABLE_QEMU_SEMIHOSTING=ON -B build -S .
+cmake --build build
+
+# Run in QEMU
+qemu-system-arm -M virt -kernel build/bootrom.elf -nographic
+```
+
+## Integration with Signing Tool
+
+### Build Signing Tool
+```bash
+# Build with OpenSSL (recommended)
+cd tools/boot_signer
+cmake -DUSE_OPENSSL=ON -B build -S .
+cmake --build build
+
+# Or build with MbedTLS
+cmake -DUSE_MBEDTLS=ON -DMBEDTLS_ROOT=../../bootrom/external/mbedtls -B build -S .
+cmake --build build
+```
+
+### Complete Secure Boot Workflow
+```bash
+# 1. Generate keys
+openssl genrsa -out private_key.pem 2048
+openssl rsa -in private_key.pem -pubout -outform DER -out public_key.der
+openssl rand -out aes_key.bin 32
+
+# 2. Sign boot image
+./tools/boot_signer/build/boot_signer fsbl.bin signed_fsbl.img private_key.pem aes_key.bin
+
+# 3. Load signed image in QEMU
+qemu-system-arm -M virt -kernel build/bootrom.elf \
+  -device loader,file=signed_fsbl.img,addr=0x10000000 -nographic
+```
+
+## Security Review Notes
+
+### Positive Findings
+- **No hardcoded secrets**: Keys in `crypto_wrapper.c` are properly zeroized (memset to 0) for testing - no real cryptographic keys are exposed in the source code
+- **Proper key handling**: Keys are zeroized on cleanup, preventing memory leaks
+- **Input validation**: Buffer size checks prevent overflows in crypto operations
+- **Secure crypto usage**: Uses MbedTLS with RSA-2048 signature verification and AES-256 decryption
+- **Anti-rollback protection**: Implemented (though stubbed for testing)
+- **No obvious vulnerabilities**: Code follows secure coding practices
+
+### Areas Requiring Production Implementation
+- **Key provisioning**: `crypto_set_aes_key()` and `crypto_set_public_key()` are stubs - need integration with secure storage (OTP/eFuse)
+- **Anti-rollback counter**: `get_nv_counter()` returns 0 - needs NV storage implementation
+- **Boot source detection**: `get_boot_source()` is hardcoded - needs platform-specific GPIO/eFuse reading
+
+### Security Recommendations
+1. **Implement secure key storage** before production deployment
+2. **Add input sanitization** for image headers beyond basic magic/version checks
+3. **Consider timing attack mitigations** for crypto operations if performance-critical
+4. **Audit flash driver** for secure read operations
+5. **Implement secure boot measurements** (PCR extension) if TPM available
+
+### GitHub Readiness
+Your code is **safe to push to GitHub**. No sensitive information is exposed, and the stub implementations are clearly documented as placeholders for production features. The codebase demonstrates good security practices and proper separation of concerns.

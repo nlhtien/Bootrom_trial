@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.15)
 # Project Configuration
 project(BootROM C ASM)
 
+# Option to build MbedTLS as static library for tools
+option(BUILD_MBEDTLS_LIB "Build MbedTLS as static library" OFF)
+
 # 1. C Standard Configuration
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -159,6 +162,15 @@ foreach(tls_file ${TLS_SOURCES})
 endforeach()
 
 list(APPEND SOURCES ${MBEDTLS_SOURCES})
+
+# Build MbedTLS as static library if requested
+if(BUILD_MBEDTLS_LIB)
+    add_library(mbedtls STATIC ${MBEDTLS_SOURCES})
+    target_include_directories(mbedtls PUBLIC ${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/include)
+    target_compile_definitions(mbedtls PRIVATE MBEDTLS_CONFIG_FILE="${CMAKE_SOURCE_DIR}/bootrom/secure_boot/mbedtls_config.h")
+    target_compile_definitions(mbedtls PRIVATE MBEDTLS_USE_PSA_CRYPTO=0)
+    target_compile_definitions(mbedtls PRIVATE MBEDTLS_PSA_CRYPTO_CLIENT=0)
+endif()
 
 # 7. Executable Target
 add_executable(bootrom.elf ${SOURCES})

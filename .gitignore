@@ -1,6 +1,8 @@
 # Build directories
 build/
 cmake-build-*/
+tools/*/build/
+tools/boot_signer/build/
 
 # Build artifacts
 *.elf
@@ -10,6 +12,20 @@ cmake-build-*/
 *.o
 *.a
 *.map
+*.img
+signed_*.img
+*.enc
+*.dec
+
+# Keys and sensitive files (NEVER commit these!)
+private_key.*
+public_key.*
+aes_key.bin
+*.key
+*.pem
+*.der
+keys/
+secrets/
 
 # IDE files
 .vscode/
@@ -17,9 +33,33 @@ cmake-build-*/
 *.swp
 *.swo
 *~
+*.tmp
 
 # CMake
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
+CMakeDoxyfile.in
+CMakeDoxygenDefaults.cmake
+CTestTestfile.cmake
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+*.out
+
+# Testing artifacts
+test_output/
+qemu_output/
+*.trace
+
+# Documentation build
+docs/build/
+doxygen/
+
+# Temporary files
+*.bak
+*.orig
+*.rej
