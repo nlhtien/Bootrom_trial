@@ -129,7 +129,6 @@ check_gitignore_coverage() {
         "*.dis"
         "*.log"
         "test_output/"
-        "docs/doxygen/"
     )
 
     local missing_patterns=()

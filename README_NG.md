@@ -74,7 +74,6 @@ File này liệt kê tất cả các thông tin cần lưu ý, thiếu sót, và
 - **Coverage**: Unit test coverage metrics
 
 ### API Documentation
-- **Doxygen**: Generate docs cho tất cả functions
 - **Usage Examples**: Code samples cho signing tool
 - **Architecture Diagrams**: Visual representation của boot flow
 

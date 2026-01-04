@@ -130,7 +130,6 @@ Closes #456
 ### 3. Documentation
 
 **Code Documentation:**
-- Use Doxygen-style comments for functions
 - Document parameters and return values
 - Explain complex algorithms
 - Update API documentation

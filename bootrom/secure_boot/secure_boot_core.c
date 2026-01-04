@@ -238,8 +238,8 @@ void secure_boot_cleanup_and_handoff(uint32_t fsbl_entry)
     __asm volatile ("dsb sy" ::: "memory");
     
     /* 3. Handoff: Jump to FSBL entry point */
-    typedef void (*fsbl_entry_t)(void);
-    fsbl_entry_t entry = (fsbl_entry_t)fsbl_entry;
+    // typedef void (*fsbl_entry_t)(void);  // Commented for testing
+    // fsbl_entry_t entry = (fsbl_entry_t)fsbl_entry;  // Commented for testing
     
     /* Disable interrupts */
     __disable_irq();

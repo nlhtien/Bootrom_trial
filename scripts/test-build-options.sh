@@ -114,19 +114,6 @@ test_mbedtls_build() {
     log_success "MbedTLS library build completed"
 }
 
-# Test documentation build
-test_docs_build() {
-    log_info "Testing documentation build..."
-    cd "$PROJECT_ROOT"
-
-    if command -v doxygen >/dev/null 2>&1; then
-        doxygen Doxyfile 2>/dev/null || true
-        log_success "Documentation build completed"
-    else
-        log_warning "Doxygen not found, skipping documentation build"
-    fi
-}
-
 # Test QEMU simulation
 test_qemu_simulation() {
     log_info "Testing QEMU simulation..."
@@ -161,7 +148,6 @@ test_all_configs() {
     test_test_build
     test_signing_tool_build
     test_mbedtls_build
-    test_docs_build
     test_qemu_simulation
 
     log_success "All build configurations tested successfully!"
@@ -183,9 +169,6 @@ case "${1:-all}" in
         ;;
     "mbedtls")
         test_mbedtls_build
-        ;;
-    "docs")
-        test_docs_build
         ;;
     "qemu")
         test_qemu_simulation

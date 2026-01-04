@@ -42,8 +42,6 @@ CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
-CMakeDoxyfile.in
-CMakeDoxygenDefaults.cmake
 CTestTestfile.cmake
 
 # OS files
