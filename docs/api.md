@@ -1,70 +1,86 @@
 # BootROM API Reference
 
+## Data Structures
+
+### `image_header_t`
+
+**Definition:**
+```c
+typedef struct {
+    uint32_t magic;              /* Magic number: 0x4D425254 ("MBRT") */
+    uint32_t version;            /* Header version */
+    uint32_t image_size;         /* Size of encrypted image */
+    uint32_t image_version;      /* Image version (for anti-rollback) */
+    uint32_t signature_offset;   /* Offset to signature */
+    uint32_t iv_offset;          /* Offset to IV */
+    uint32_t reserved[2];        /* Reserved */
+    uint8_t  iv[16];             /* AES IV (128 bits) */
+    uint8_t  signature[256];     /* RSA-2048 signature */
+} image_header_t;
+```
+
+**Description:**
+Image header structure for signed boot images.
+
+**Fields:**
+- `magic`: Magic number (0x4D425254 = "MBRT")
+- `version`: Header version (currently 1)
+- `image_size`: Size of encrypted image in bytes
+- `image_version`: Image version for anti-rollback
+- `signature_offset`: Offset to signature within image
+- `iv_offset`: Offset to initialization vector
+- `iv`: AES initialization vector (16 bytes)
+- `signature`: RSA-2048 signature (256 bytes)
+
 ## Secure Boot Core API
 
-### `secure_boot_verify()`
+### `secure_boot_load_and_verify()`
 
 **Prototype:**
 ```c
-int secure_boot_verify(const uint8_t *image_data, size_t image_size);
+int secure_boot_load_and_verify(uint32_t image_addr,
+                                 uint8_t *decrypted_buffer,
+                                 uint32_t buffer_size,
+                                 uint32_t *decrypted_size);
 ```
 
 **Description:**
-Main entry point for secure boot verification. Validates image header, verifies RSA signature, decrypts payload, and checks anti-rollback counter.
+Loads and verifies a signed boot image from flash memory. Performs signature verification, decryption, and anti-rollback checks.
 
 **Parameters:**
-- `image_data`: Pointer to signed image data
-- `image_size`: Size of image data in bytes
+- `image_addr`: Address of image in flash (0 = auto-detect)
+- `decrypted_buffer`: Buffer to store decrypted image
+- `buffer_size`: Size of buffer in bytes
+- `decrypted_size`: Output: actual size of decrypted image
 
 **Return Values:**
-- `SECURE_BOOT_SUCCESS` (0): Verification successful
-- `SECURE_BOOT_INVALID_HEADER`: Invalid image header
-- `SECURE_BOOT_SIGNATURE_FAIL`: RSA signature verification failed
-- `SECURE_BOOT_DECRYPT_FAIL`: AES decryption failed
-- `SECURE_BOOT_ROLLBACK_DETECTED`: Anti-rollback check failed
+- `0`: Success
+- `-1`: Invalid parameters
+- `-2`: Image loading failed
+- `-3`: Verification failed
 
-**Notes:**
-- Function is blocking and may take up to 200ms
-- Uses static memory allocation only
-- Logs progress via UART if enabled
-
-### `verify_image_header()`
+### `secure_boot_cleanup_and_handoff()`
 
 **Prototype:**
 ```c
-int verify_image_header(const image_header_t *header);
+void secure_boot_cleanup_and_handoff(uint32_t fsbl_entry);
 ```
 
 **Description:**
-Validates image header structure and magic number.
+Cleans up sensitive data and hands off execution to First Stage Boot Loader (FSBL).
 
 **Parameters:**
-- `header`: Pointer to image header structure
+- `fsbl_entry`: Entry point address of FSBL
 
-**Return Values:**
-- `0`: Header valid
-- `-1`: Invalid magic number
-- `-2`: Unsupported version
-
-### `verify_signature()`
+### `secure_boot_cleanup()`
 
 **Prototype:**
 ```c
-int verify_signature(const uint8_t *data, size_t data_len, const uint8_t *signature);
+void secure_boot_cleanup(void);
 ```
 
 **Description:**
-Verifies RSA signature of data using configured public key.
-
-**Parameters:**
-- `data`: Data to verify
-- `data_len`: Length of data
-- `signature`: RSA signature (256 bytes)
-
-**Return Values:**
-- `0`: Signature valid
-- `-1`: Signature invalid
-- `-2`: Crypto operation failed
+Zeroizes sensitive cryptographic data from memory.
 
 ## Crypto Wrapper API
 
@@ -80,24 +96,107 @@ Initializes crypto subsystem and loads keys from secure storage.
 
 **Return Values:**
 - `0`: Success
-- `-1`: Key loading failed
+- `-1`: Initialization failed
 
 ### `crypto_verify_signature()`
 
 **Prototype:**
 ```c
-int crypto_verify_signature(const uint8_t *data, size_t data_len,
-                           const uint8_t *signature, size_t sig_len);
+int crypto_verify_signature(const uint8_t *hash,
+                             size_t hash_len,
+                             const uint8_t *signature,
+                             size_t signature_len);
 ```
 
 **Description:**
 RSA signature verification wrapper.
 
 **Parameters:**
-- `data`: Data to verify
-- `data_len`: Data length
-- `signature`: Signature bytes
-- `sig_len`: Signature length
+- `hash`: SHA-256 hash to verify
+- `hash_len`: Hash length (32 bytes)
+- `signature`: RSA signature
+- `signature_len`: Signature length
+
+**Return Values:**
+- `0`: Signature valid
+- `-1`: Verification failed
+
+### `crypto_set_aes_key()`
+
+**Prototype:**
+```c
+int crypto_set_aes_key(const uint8_t *key, size_t key_len);
+```
+
+**Description:**
+Sets AES key for encryption/decryption operations.
+
+**Parameters:**
+- `key`: AES key (16, 24, or 32 bytes)
+- `key_len`: Key length in bytes
+
+**Return Values:**
+- `0`: Success
+- `-1`: Invalid key length
+
+### `crypto_aes_decrypt()`
+
+**Prototype:**
+```c
+int crypto_aes_decrypt(const uint8_t *input, uint8_t *output,
+                        size_t size, const uint8_t *iv);
+```
+
+**Description:**
+AES-CBC decryption with PKCS#7 padding.
+
+**Parameters:**
+- `input`: Encrypted data
+- `output`: Decryption output buffer
+- `size`: Data size
+- `iv`: Initialization vector (16 bytes)
+
+**Return Values:**
+- `0`: Success
+- `-1`: Decryption failed
+
+## Test Framework API
+
+### `test_init()`
+
+**Prototype:**
+```c
+int test_init(void);
+```
+
+**Description:**
+Initializes the unit test framework.
+
+**Return Values:**
+- `0`: Success
+
+### `test_run_suite()`
+
+**Prototype:**
+```c
+void test_run_suite(const test_suite_t *suite);
+```
+
+**Description:**
+Runs a test suite and reports results.
+
+**Parameters:**
+- `suite`: Pointer to test suite structure
+
+### `test_report()`
+
+**Prototype:**
+```c
+void test_report(void);
+```
+
+**Description:**
+Generates final test report with pass/fail statistics.
 
 **Return Values:**
 - `0`: Verification successful

@@ -3,6 +3,8 @@ build/
 cmake-build-*/
 tools/*/build/
 tools/boot_signer/build/
+test_output/
+CMakeFiles/
 
 # Build artifacts
 *.elf
@@ -57,7 +59,6 @@ qemu_output/
 
 # Documentation build
 docs/build/
-doxygen/
 
 # Temporary files
 *.bak

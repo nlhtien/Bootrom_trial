@@ -1,0 +1,34 @@
+# Security checks
+./scripts/check-security.sh all
+
+# Build testing
+./scripts/test-build-options.sh all
+
+# Individual builds via Makefile
+make deps                    # Check dependencies
+make build                   # Build all components
+make test                    # Run tests
+make debug                   # Debug build
+make release                 # Release build
+make docs                    # Generate docs
+make clean                   # Clean build artifacts
+make install-tools           # Install development tools
+
+
+# Test individual configs
+./scripts/test-build-options.sh basic      # BootROM release build
+./scripts/test-build-options.sh debug      # Debug build with QEMU
+./scripts/test-build-options.sh test       # Unit test build
+./scripts/test-build-options.sh signing    # Signing tool build
+./scripts/test-build-options.sh mbedtls    # MbedTLS library build
+./scripts/test-build-options.sh docs       # Documentation build
+./scripts/test-build-options.sh qemu       # QEMU simulation test
+./scripts/test-build-options.sh all        # Test all configurations
+
+# Check different aspects
+./scripts/check-security.sh sensitive      # Sensitive files
+./scripts/check-security.sh secrets        # Hardcoded secrets
+./scripts/check-security.sh gitignore      # .gitignore coverage
+./scripts/check-security.sh large          # Large files
+./scripts/check-security.sh permissions    # File permissions
+./scripts/check-security.sh all            # All checks

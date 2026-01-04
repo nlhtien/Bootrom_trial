@@ -1,10 +1,31 @@
 cmake_minimum_required(VERSION 3.15)
 
+# Set toolchain file for cross-compilation
+set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/toolchain.cmake)
+
 # Project Configuration
 project(BootROM C ASM)
 
-# Option to build MbedTLS as static library for tools
+# ============================================================================
+# Build Options
+# ============================================================================
+
+# Build targets
+option(BUILD_BOOTROM "Build BootROM firmware" ON)
+option(BUILD_TESTING "Build unit tests" OFF)
+option(BUILD_DOCS "Build documentation" OFF)
 option(BUILD_MBEDTLS_LIB "Build MbedTLS as static library" OFF)
+
+# Feature options
+option(ENABLE_QEMU_SEMIHOSTING "Enable semihosting for QEMU UART output" OFF)
+option(ENABLE_DEBUG_LOGGING "Enable debug logging" ON)
+option(ENABLE_CRYPTO_ACCEL "Enable hardware crypto acceleration" OFF)
+option(ENABLE_SECURE_DEBUG "Enable secure debug features" OFF)
+
+# Tool options
+option(BUILD_SIGNING_TOOL "Build signing tool" ON)
+option(USE_OPENSSL "Use OpenSSL for signing tool" ON)
+option(USE_MBEDTLS "Use MbedTLS for signing tool" OFF)
 
 # 1. C Standard Configuration
 set(CMAKE_C_STANDARD 11)
@@ -22,10 +43,26 @@ set(CPU_FLAGS "-mcpu=cortex-r5 -mthumb -mfloat-abi=hard -mfpu=vfpv3-d16")
 # -ffunction-sections -fdata-sections: Allow linker to remove unused code
 set(COMMON_FLAGS "${CPU_FLAGS} -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -fno-builtin -fno-strict-aliasing")
 
-# Option for QEMU semihosting support
-option(ENABLE_QEMU_SEMIHOSTING "Enable semihosting for QEMU UART output" OFF)
+# Feature compilation flags
 if(ENABLE_QEMU_SEMIHOSTING)
     add_compile_definitions(QEMU_SEMIHOSTING)
+endif()
+
+if(ENABLE_DEBUG_LOGGING)
+    add_compile_definitions(DEBUG_LOGGING)
+endif()
+
+if(ENABLE_CRYPTO_ACCEL)
+    add_compile_definitions(CRYPTO_ACCELERATION)
+endif()
+
+if(ENABLE_SECURE_DEBUG)
+    add_compile_definitions(SECURE_DEBUG)
+endif()
+
+if(BUILD_TESTING)
+    add_compile_definitions(UNIT_TESTING)
+    enable_testing()
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -172,8 +209,38 @@ if(BUILD_MBEDTLS_LIB)
     target_compile_definitions(mbedtls PRIVATE MBEDTLS_PSA_CRYPTO_CLIENT=0)
 endif()
 
-# 7. Executable Target
-add_executable(bootrom.elf ${SOURCES})
+# ============================================================================
+# Build Targets
+# ============================================================================
+
+# BootROM firmware
+if(BUILD_BOOTROM)
+    add_executable(bootrom.elf ${SOURCES})
+endif()
+
+# Unit tests
+if(BUILD_TESTING)
+    add_executable(test_runner
+        bootrom/tests/test_main.c
+        bootrom/tests/test_crypto.c
+        bootrom/tests/test_secure_boot.c
+        bootrom/tests/test_framework.c
+        bootrom/platform/platform.c
+        bootrom/drivers/uart.c
+        bootrom/drivers/flash.c
+        bootrom/drivers/watchdog.c
+        bootrom/secure_boot/secure_boot_core.c
+        bootrom/crypto/crypto_wrapper.c
+        ${MBEDTLS_SOURCES}
+    )
+    target_compile_definitions(test_runner PRIVATE UNIT_TESTING)
+    add_test(NAME unit_tests COMMAND test_runner)
+endif()
+
+# 7. Executable Target (legacy - kept for compatibility)
+if(NOT BUILD_BOOTROM AND NOT BUILD_TESTING)
+    add_executable(bootrom.elf ${SOURCES})
+endif()
 
 # 8. Tool Discovery
 # Ensure objcopy/objdump are found for post-build steps
@@ -187,12 +254,14 @@ endif()
 
 # 9. Post-build Actions
 # Generate Binary (.bin), Hex (.hex), and Disassembly (.dis) files
-add_custom_command(TARGET bootrom.elf POST_BUILD
-    COMMAND ${CMAKE_OBJCOPY} -O binary bootrom.elf bootrom.bin
-    COMMAND ${CMAKE_OBJCOPY} -O ihex bootrom.elf bootrom.hex
-    COMMAND ${CMAKE_OBJDUMP} -d bootrom.elf > bootrom.dis
-    COMMENT "Post-build: Generating binary, hex, and disassembly files..."
-)
+if(BUILD_BOOTROM)
+    add_custom_command(TARGET bootrom.elf POST_BUILD
+        COMMAND ${CMAKE_OBJCOPY} -O binary bootrom.elf bootrom.bin
+        COMMAND ${CMAKE_OBJCOPY} -O ihex bootrom.elf bootrom.hex
+        COMMAND ${CMAKE_OBJDUMP} -d bootrom.elf > bootrom.dis
+        COMMENT "Post-build: Generating binary, hex, and disassembly files..."
+    )
+endif()
 
 # Print Build Configuration Status
 message(STATUS "-------------------------------------------------")

@@ -18,8 +18,8 @@ Production-ready Boot ROM project for ARM Cortex-R5F processor with Secure Boot 
 - **MbedTLS Integration** with bare-metal configuration (static buffer allocation)
 - **Minimal drivers** (UART, Flash, Watchdog timer)
 - **CMake build system**
-
-## Directory Structure
+- **Unit testing framework** with automated test runner
+- **Automated build scripts** and security checks
 
 ## Directory Structure
 
@@ -42,9 +42,31 @@ bootrom/
 ├── platform/                  # Platform abstraction
 │   ├── platform.c/h           # Platform functions (MPU, TCM, cache setup)
 │   └── platform_mbedtls.h     # MbedTLS platform integration
+├── tests/                     # Unit test framework
+│   ├── test_main.c            # Test runner entry point
+│   ├── test_crypto.c/h        # Crypto wrapper tests
+│   ├── test_secure_boot.c/h   # Secure boot core tests
+│   └── test_framework.c/h     # Test framework implementation
 └── main.c                     # Entry point (Stage 3 & 4 orchestration)
-...
+
+tools/
+├── boot_signer/               # Image signing tool
+│   ├── main.c                 # Signing tool entry point
+│   ├── image_builder_*.c      # Image building implementations
+│   └── README.md              # Signing tool documentation
+
+scripts/
+├── test-build-options.sh      # Automated build testing script
+└── check-security.sh          # Security and sensitive file checks
+
+docs/                          # Documentation
+├── README.md                  # Documentation index
+├── architecture.md            # System architecture
+├── api.md                     # API reference
+├── security.md                # Security implementation
+└── troubleshooting.md         # Troubleshooting guide
 ```
+
 
 ## 4-Stage Boot Flow
 
