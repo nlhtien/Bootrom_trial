@@ -23,7 +23,8 @@ typedef struct {
 #define IMAGE_MAGIC 0x5442524D  /* "MBRT" in little-endian */
 #define IMAGE_VERSION 1
 
-/* Mock image header for testing */
+/* Mock image header for testing (commented out - not currently used) */
+/*
 static const image_header_t test_header = {
     .magic = IMAGE_MAGIC,
     .version = IMAGE_VERSION,
@@ -34,8 +35,9 @@ static const image_header_t test_header = {
     .reserved = {0, 0},
     .iv = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f},
-    .signature = {0}  /* Mock signature */
+    .signature = {0}  // Mock signature
 };
+*/
 
 /* Test cases */
 static void test_secure_boot_cleanup(void)

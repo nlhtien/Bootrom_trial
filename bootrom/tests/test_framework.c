@@ -27,7 +27,7 @@ static void test_println(const char *str)
 
 static void test_printf(const char *format, ...)
 {
-    char buffer[256];
+    // char buffer[256];  // Not used in current implementation
     // Simple implementation - in real embedded system you'd use proper printf
     test_print(format);  // Placeholder
 }
@@ -55,7 +55,7 @@ static void test_run_case(const test_case_t *test_case)
 
     // Run setup if provided
     if (test_case->setup) {
-        ((void (*)(void))test_case->setup)();
+        test_case->setup();
     }
 
     // Run the test
@@ -63,7 +63,7 @@ static void test_run_case(const test_case_t *test_case)
 
     // Run teardown if provided
     if (test_case->teardown) {
-        ((void (*)(void))test_case->teardown)();
+        test_case->teardown();
     }
 
     // For now, assume all tests pass (no exception handling)
@@ -82,7 +82,7 @@ void test_run_suite(const test_suite_t *suite)
 
     // Run suite setup if provided
     if (suite->setup) {
-        ((void (*)(void))suite->setup)();
+        suite->setup();
     }
 
     for (i = 0; i < suite->num_cases; i++) {
@@ -91,7 +91,7 @@ void test_run_suite(const test_suite_t *suite)
 
     // Run suite teardown if provided
     if (suite->teardown) {
-        ((void (*)(void))suite->teardown)();
+        suite->teardown();
     }
 
     test_println("");

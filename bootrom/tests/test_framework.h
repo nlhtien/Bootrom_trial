@@ -12,13 +12,16 @@
 /* Test function type */
 typedef void (*test_fn)(void);
 
+/* Setup/teardown function type */
+typedef void (*test_setup_fn)(void);
+
 /* Test case structure */
 typedef struct {
     const char *name;
     const char *description;
-    void *setup;
+    test_setup_fn setup;
     test_fn function;
-    void *teardown;
+    test_setup_fn teardown;
 } test_case_t;
 
 /* Test suite structure */
@@ -30,8 +33,8 @@ typedef struct {
     uint32_t passed;
     uint32_t failed;
     uint32_t skipped;
-    void *setup;
-    void *teardown;
+    test_setup_fn setup;
+    test_setup_fn teardown;
 } test_suite_t;
 
 /* Test framework functions */
