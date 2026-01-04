@@ -10,6 +10,7 @@
 #include "drivers/uart.h"
 #include "drivers/flash.h"
 #include "platform/platform.h"
+#include "platform/platform_mbedtls.h"
 
 #define BOOT_IMAGE_ADDRESS 0x10000000  /* Address of boot image in flash */
 #define DECRYPTED_IMAGE_BUFFER_SIZE (256 * 1024)  /* 256KB buffer for decrypted image */

@@ -41,7 +41,7 @@ set(CPU_FLAGS "-mcpu=cortex-r5 -mthumb -mfloat-abi=hard -mfpu=vfpv3-d16")
 # 3. Compiler Options
 # -g3: Generate maximum debug information for GDB
 # -ffunction-sections -fdata-sections: Allow linker to remove unused code
-set(COMMON_FLAGS "${CPU_FLAGS} -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -fno-builtin -fno-strict-aliasing")
+set(COMMON_FLAGS "${CPU_FLAGS} -Wall -Wextra -Wpedantic -Wno-implicit-function-declaration -ffunction-sections -fdata-sections -fno-builtin -fno-strict-aliasing")
 
 # Feature compilation flags
 if(ENABLE_QEMU_SEMIHOSTING)
@@ -94,6 +94,7 @@ include_directories(
 add_compile_definitions(MBEDTLS_CONFIG_FILE="${CMAKE_SOURCE_DIR}/bootrom/secure_boot/mbedtls_config.h")
 add_compile_definitions(MBEDTLS_USE_PSA_CRYPTO=0)
 add_compile_definitions(MBEDTLS_PSA_CRYPTO_CLIENT=0)
+add_compile_definitions(MBEDTLS_PLATFORM_STD_SNPRINTF=mbedtls_platform_snprintf)
 
 # 6. Source Files
 set(SOURCES

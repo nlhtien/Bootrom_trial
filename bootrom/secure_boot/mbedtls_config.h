@@ -32,6 +32,11 @@
 #define MBEDTLS_MEMORY_BUFFER_ALLOC_C
 
 /* ============================================================================
+ * 3. DISABLE OID FUNCTIONALITY (not needed for BootROM)
+ * ============================================================================ */
+#undef MBEDTLS_OID_C
+
+/* ============================================================================
  * 2. PSA Crypto Support (DISABLED for BootROM - no RNG)
  * ============================================================================ */
 /* Disable PSA Crypto to avoid RNG requirements */
