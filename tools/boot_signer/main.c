@@ -36,10 +36,10 @@ int main(int argc, char *argv[]) {
     int result = build_signed_image(input_file, output_file, private_key_file, aes_key_file);
 
     if (result == 0) {
-        printf("✅ Image signed successfully!\n");
+        printf("Image signed successfully!\n");
         return 0;
     } else {
-        printf("❌ Signing failed!\n");
+        printf("Signing failed!\n");
         return 1;
     }
 }

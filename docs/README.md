@@ -2,7 +2,7 @@
 
 Welcome to the BootROM project documentation! This index provides quick access to all documentation resources.
 
-## 📖 Documentation Overview
+## Documentation Overview
 
 | Document | Description | Audience |
 |----------|-------------|----------|
@@ -12,7 +12,7 @@ Welcome to the BootROM project documentation! This index provides quick access t
 | [README_SIGN.md](../README_SIGN.md) | Signing workflow and tools | Developers |
 | [README_TEST.md](../README_TEST.md) | Testing procedures | QA/Test engineers |
 
-## 🏗️ Architecture & Design
+## Architecture & Design
 
 ### [Architecture Guide](architecture.md)
 - System architecture overview
@@ -28,7 +28,7 @@ Welcome to the BootROM project documentation! This index provides quick access t
 - Usage examples
 - Configuration constants
 
-## 🔒 Security
+## Security
 
 ### [Security Analysis](security.md)
 - Threat model
@@ -37,7 +37,7 @@ Welcome to the BootROM project documentation! This index provides quick access t
 - Compliance considerations
 - Security recommendations
 
-## 🛠️ Development
+## Development
 
 ### [Troubleshooting Guide](troubleshooting.md)
 - Common build issues
@@ -53,7 +53,7 @@ Welcome to the BootROM project documentation! This index provides quick access t
 - Pull request process
 - Getting help
 
-## 📋 Project Management
+## Project Management
 
 ### [Changelog](CHANGELOG.md)
 - Version history
@@ -74,7 +74,7 @@ Welcome to the BootROM project documentation! This index provides quick access t
 - [U-Boot Secure Boot](https://u-boot.readthedocs.io/en/latest/usage/fit/signature.html)
 - [OP-TEE](https://www.op-tee.org/)
 
-## 📚 Learning Resources
+## Learning Resources
 
 ### Cryptography
 - [NIST SP 800-57: Recommendation for Key Management](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-57pt1r5.pdf)
@@ -91,7 +91,7 @@ Welcome to the BootROM project documentation! This index provides quick access t
 - [TrustZone Technology](https://developer.arm.com/ip-products/security-ip/trustzone)
 - [Cortex-R Security](https://developer.arm.com/ip-products/processors/cortex-r/cortex-r5)
 
-## 🤝 Support
+## Support
 
 ### Getting Help
 1. Check this documentation first
@@ -100,12 +100,12 @@ Welcome to the BootROM project documentation! This index provides quick access t
 4. Join community discussions
 
 ### Issue Templates
-- 🐛 [Bug Report](../../issues/new?template=bug_report.md)
-- ✨ [Feature Request](../../issues/new?template=feature_request.md)
-- 📖 [Documentation Issue](../../issues/new?template=documentation_issue.md)
-- 🔒 [Security Issue](../../issues/new?template=security_issue.md)
+- [Bug Report](../../issues/new?template=bug_report.md)
+- [Feature Request](../../issues/new?template=feature_request.md)
+- [Documentation Issue](../../issues/new?template=documentation_issue.md)
+- [Security Issue](../../issues/new?template=security_issue.md)
 
-## 📊 Project Status
+## Project Status
 
 ### Current Version
 - **Version:** 1.0.0

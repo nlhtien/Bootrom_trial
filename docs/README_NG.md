@@ -121,7 +121,6 @@ File này liệt kê tất cả các thông tin cần lưu ý, thiếu sót, và
 
 ### Support Structure
 - **Issue Tracking**: GitHub Issues cho bugs/features
-- **Documentation Updates**: Keep docs in sync với code
 - **Training Materials**: For new developers
 
 ## 9. Future Enhancements
@@ -133,19 +132,13 @@ File này liệt kê tất cả các thông tin cần lưu ý, thiếu sót, và
 
 ### Platform Support
 - **Multiple Targets**: Support khác ARM variants
-- **OS Integration**: Linux/Android integration
-- **Cloud Integration**: AWS IoT, Azure IoT support
+- **OS Integration**: Linux/RTOS integration
 
 ## 10. Risk Assessment
 ### High Risk Items
 - **Crypto Bugs**: Potential vulnerabilities trong crypto code
 - **Hardware Dependencies**: Reliance trên specific hardware features
 - **Supply Chain**: Third-party libraries (MbedTLS) security
-
-### Mitigation Plans
-- **Code Review**: Mandatory security reviews
-- **Third-Party Audits**: External security audits
-- **Backup Plans**: Fallback mechanisms nếu hardware fail
 
 ## Checklist Trọn Vẹn
 - [x] Fix signing tool build issues (sử dụng OpenSSL)

@@ -251,7 +251,8 @@ git clone <repository-url>
 cd Bootrom_trial
 
 # Initialize submodules (MbedTLS)
-git submodule update --init --recursive
+# git submodule update --init --recursive
+# Change submodule -> code in repo
 
 # Configure build
 cmake -B build -S .
@@ -326,6 +327,3 @@ qemu-system-arm -M virt -kernel build/bootrom.elf \
 3. **Consider timing attack mitigations** for crypto operations if performance-critical
 4. **Audit flash driver** for secure read operations
 5. **Implement secure boot measurements** (PCR extension) if TPM available
-
-### GitHub Readiness
-Your code is **safe to push to GitHub**. No sensitive information is exposed, and the stub implementations are clearly documented as placeholders for production features. The codebase demonstrates good security practices and proper separation of concerns.

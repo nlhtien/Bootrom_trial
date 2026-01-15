@@ -13,7 +13,6 @@ project(BootROM C ASM)
 # Build targets
 option(BUILD_BOOTROM "Build BootROM firmware" ON)
 option(BUILD_TESTING "Build unit tests" OFF)
-option(BUILD_DOCS "Build documentation" OFF)
 option(BUILD_MBEDTLS_LIB "Build MbedTLS as static library" OFF)
 
 # Feature options
@@ -103,7 +102,7 @@ set(SOURCES
     bootrom/platform/platform.c
     bootrom/drivers/uart.c
     bootrom/drivers/flash.c
-    bootrom/drivers/watchdog.c  # Added missing watchdog driver
+    bootrom/drivers/watchdog.c
     bootrom/secure_boot/secure_boot_core.c
     bootrom/crypto/crypto_wrapper.c
 )

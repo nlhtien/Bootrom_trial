@@ -32,7 +32,7 @@ int build_signed_image(const char *input_file, const char *output_file,
         // 1. Load input binary
         fp = fopen(input_file, "rb");
         if (!fp) {
-            printf("❌ Cannot open input file: %s\n", input_file);
+            printf("Cannot open input file: %s\n", input_file);
             break;
         }
 
@@ -42,7 +42,7 @@ int build_signed_image(const char *input_file, const char *output_file,
 
         input_data = malloc(input_size);
         if (!input_data) {
-            printf("❌ Memory allocation failed\n");
+            printf("Memory allocation failed\n");
             break;
         }
 
@@ -51,16 +51,16 @@ int build_signed_image(const char *input_file, const char *output_file,
         fp = NULL;
 
         if (read_size != input_size) {
-            printf("❌ Failed to read input file\n");
+            printf("Failed to read input file\n");
             break;
         }
 
-        printf("📁 Loaded input binary: %zu bytes\n", input_size);
+        printf("Loaded input binary: %zu bytes\n", input_size);
 
         // 2. Load AES key (32 bytes)
         fp = fopen(aes_key_file, "rb");
         if (!fp) {
-            printf("❌ Cannot open AES key file: %s\n", aes_key_file);
+            printf("Cannot open AES key file: %s\n", aes_key_file);
             break;
         }
 
@@ -70,33 +70,33 @@ int build_signed_image(const char *input_file, const char *output_file,
         fp = NULL;
 
         if (read_size != 32) {
-            printf("❌ AES key must be 32 bytes\n");
+            printf("AES key must be 32 bytes\n");
             break;
         }
 
-        printf("🔑 Loaded AES key\n");
+        printf("Loaded AES key\n");
 
         // 3. Generate random IV using MbedTLS
         uint8_t iv[16];
         ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
         if (ret != 0) {
-            printf("❌ CTR-DRBG seed failed: -0x%04x\n", -ret);
+            printf("CTR-DRBG seed failed: -0x%04x\n", -ret);
             break;
         }
 
         ret = mbedtls_ctr_drbg_random(&ctr_drbg, iv, 16);
         if (ret != 0) {
-            printf("❌ IV generation failed: -0x%04x\n", -ret);
+            printf("IV generation failed: -0x%04x\n", -ret);
             break;
         }
 
-        printf("🎲 Generated random IV\n");
+        printf("Generated random IV\n");
 
         // 4. Encrypt payload with AES-256-CBC using MbedTLS
         size_t encrypted_size = ((input_size + 15) / 16) * 16; // Pad to block size
         encrypted_data = malloc(encrypted_size);
         if (!encrypted_data) {
-            printf("❌ Memory allocation failed\n");
+            printf("Memory allocation failed\n");
             break;
         }
 
@@ -109,7 +109,7 @@ int build_signed_image(const char *input_file, const char *output_file,
 
         ret = mbedtls_aes_setkey_enc(&aes_ctx, aes_key, 256);
         if (ret != 0) {
-            printf("❌ AES key setup failed: -0x%04x\n", -ret);
+            printf("AES key setup failed: -0x%04x\n", -ret);
             break;
         }
 
@@ -118,22 +118,22 @@ int build_signed_image(const char *input_file, const char *output_file,
         ret = mbedtls_aes_crypt_cbc(&aes_ctx, MBEDTLS_AES_ENCRYPT, encrypted_size,
                                    iv_copy, encrypted_data, encrypted_data);
         if (ret != 0) {
-            printf("❌ AES encryption failed: -0x%04x\n", -ret);
+            printf("AES encryption failed: -0x%04x\n", -ret);
             break;
         }
 
-        printf("🔒 Encrypted payload: %zu bytes\n", encrypted_size);
+        printf("Encrypted payload: %zu bytes\n", encrypted_size);
 
         // 5. Calculate SHA-256 hash of encrypted data using MbedTLS
         uint8_t hash[32];
         mbedtls_sha256(encrypted_data, encrypted_size, hash, 0); // 0 = SHA-256
 
-        printf("🔢 Calculated SHA-256 hash\n");
+        printf("Calculated SHA-256 hash\n");
 
         // 6. Load private key and sign hash using MbedTLS
         fp = fopen(private_key_file, "rb");
         if (!fp) {
-            printf("❌ Cannot open private key file: %s\n", private_key_file);
+            printf("Cannot open private key file: %s\n", private_key_file);
             break;
         }
 
@@ -143,7 +143,7 @@ int build_signed_image(const char *input_file, const char *output_file,
 
         key_data = malloc(key_size);
         if (!key_data) {
-            printf("❌ Memory allocation failed\n");
+            printf("Memory allocation failed\n");
             fclose(fp);
             break;
         }
@@ -153,13 +153,13 @@ int build_signed_image(const char *input_file, const char *output_file,
         fp = NULL;
 
         if (read_size != key_size) {
-            printf("❌ Failed to read private key\n");
+            printf("Failed to read private key\n");
             break;
         }
 
         ret = mbedtls_pk_parse_key(&pk, key_data, key_size, NULL, 0);
         if (ret != 0) {
-            printf("❌ Private key parsing failed: -0x%04x\n", -ret);
+            printf("Private key parsing failed: -0x%04x\n", -ret);
             break;
         }
 
@@ -169,11 +169,11 @@ int build_signed_image(const char *input_file, const char *output_file,
         ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, hash, 32, signature, &sig_len,
                              mbedtls_ctr_drbg_random, &ctr_drbg);
         if (ret != 0) {
-            printf("❌ Signature generation failed: -0x%04x\n", -ret);
+            printf("Signature generation failed: -0x%04x\n", -ret);
             break;
         }
 
-        printf("✍️  Generated RSA signature: %zu bytes\n", sig_len);
+        printf("Generated RSA signature: %zu bytes\n", sig_len);
 
         // 7. Create image header (same format as BootROM expects)
         image_header_t header;
@@ -185,25 +185,25 @@ int build_signed_image(const char *input_file, const char *output_file,
         memcpy(header.iv, iv, 16);
         memcpy(header.signature, signature, 256);
 
-        printf("📄 Created image header\n");
+        printf("Created image header\n");
 
         // 8. Write output file: header + encrypted data
         fp = fopen(output_file, "wb");
         if (!fp) {
-            printf("❌ Cannot create output file: %s\n", output_file);
+            printf("Cannot create output file: %s\n", output_file);
             break;
         }
 
         size_t written = fwrite(&header, 1, sizeof(header), fp);
         if (written != sizeof(header)) {
-            printf("❌ Failed to write header\n");
+            printf("Failed to write header\n");
             fclose(fp);
             break;
         }
 
         written = fwrite(encrypted_data, 1, encrypted_size, fp);
         if (written != encrypted_size) {
-            printf("❌ Failed to write encrypted data\n");
+            printf("Failed to write encrypted data\n");
             fclose(fp);
             break;
         }
@@ -211,7 +211,7 @@ int build_signed_image(const char *input_file, const char *output_file,
         fclose(fp);
         fp = NULL;
 
-        printf("💾 Wrote signed image: %s\n", output_file);
+        printf("Wrote signed image: %s\n", output_file);
         ret = 0;
 
     } while(0);

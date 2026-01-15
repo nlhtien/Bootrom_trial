@@ -257,11 +257,11 @@ const uint8_t test_aes_key[] = { /* ... */ };
 ### Test Results Summary
 
 #### Current Status
-- ✅ Basic crypto functions tested
-- ✅ Image format validation working
-- ✅ Fail-safe modes implemented
-- ⚠️ Hardware security not tested
-- ❌ Production keys not provisioned
+- Basic crypto functions tested
+- Image format validation working
+- Fail-safe modes implemented
+- Hardware security not tested
+- Production keys not provisioned
 
 ## Risk Assessment
 

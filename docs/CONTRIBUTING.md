@@ -274,5 +274,5 @@ Contributors are recognized through:
 
 By contributing to this project, you agree that your contributions will be licensed under the same license as the project (see LICENSE file).
 
-Thank you for contributing to BootROM! 🚀</content>
+Thank you for contributing to BootROM! </content>
 <parameter name="filePath">/home/kora/tiennlh/project/Bootrom_trial/docs/CONTRIBUTING.md

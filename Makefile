@@ -1,7 +1,7 @@
 # BootROM Automated Build System
 # Supports multiple build configurations and automated workflows
 
-.PHONY: all help setup deps build test clean docs qemu flash
+.PHONY: all help setup deps build test clean qemu flash
 .PHONY: debug release ci cd dist install-tools generate-keys sign-test
 .PHONY: full-test integration-test performance-test security-test
 
@@ -33,7 +33,6 @@ help:
 	@echo "  $(GREEN)build$(NC)         - Build all components"
 	@echo "  $(GREEN)test$(NC)          - Run all tests"
 	@echo "  $(GREEN)clean$(NC)         - Clean all build artifacts"
-	@echo "  $(GREEN)docs$(NC)          - Generate documentation"
 	@echo ""
 	@echo "$(YELLOW)Build Variants:$(NC)"
 	@echo "  $(GREEN)debug$(NC)         - Build with debug symbols"
@@ -166,13 +165,6 @@ clean:
 	@find . -name "test_*.der" -delete
 	@echo "$(GREEN)Clean completed!$(NC)"
 
-# Generate documentation
-docs:
-	@echo "$(BLUE)Generating documentation...$(NC)"
-	@doxygen Doxyfile
-	@echo "$(GREEN)Documentation generated in docs/doxygen/html/$(NC)"
-
-
 # Debug build
 debug:
 	@echo "$(BLUE)Building debug version...$(NC)"
@@ -247,7 +239,6 @@ dist: clean release docs
 	@cp $(BUILD_DIR)/bootrom.elf dist/
 	@cp $(BUILD_DIR)/bootrom.bin dist/
 	@cp $(BUILD_DIR)/bootrom.hex dist/
-	@cp -r docs/doxygen/html dist/docs
 	@tar -czf bootrom-$(shell date +%Y%m%d).tar.gz dist/
 	@echo "$(GREEN)Distribution package created!$(NC)"
 
