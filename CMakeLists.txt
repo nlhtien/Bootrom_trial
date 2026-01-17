@@ -1,62 +1,96 @@
 cmake_minimum_required(VERSION 3.15)
 
-# Set toolchain file for cross-compilation
+# =============================================================================
+# Toolchain
+# =============================================================================
 set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/toolchain.cmake)
 
-# Project Configuration
-project(BootROM C ASM)
-
-# ============================================================================
+# =============================================================================
+# Project
+# =============================================================================
+project(BootROM
+    VERSION 1.0
+    DESCRIPTION "Boot ROM Firmware"
+    LANGUAGES C ASM
+)
+# =============================================================================
 # Build Options
-# ============================================================================
+# =============================================================================
 
 # Build targets
 option(BUILD_BOOTROM "Build BootROM firmware" ON)
 option(BUILD_TESTING "Build unit tests" OFF)
-option(BUILD_MBEDTLS_LIB "Build MbedTLS as static library" OFF)
 
-# Feature options
-option(ENABLE_QEMU_SEMIHOSTING "Enable semihosting for QEMU UART output" OFF)
-option(ENABLE_DEBUG_LOGGING "Enable debug logging" ON)
-option(ENABLE_CRYPTO_ACCEL "Enable hardware crypto acceleration" OFF)
-option(ENABLE_SECURE_DEBUG "Enable secure debug features" OFF)
+# Feature switches
+option(ENABLE_QEMU_SEMIHOSTING "Enable semihosting for QEMU output" OFF)
+#option(ENABLE_CRYPTO_ACCEL "Enable hardware crypto acceleration hooks" OFF)
 
-# Tool options
-option(BUILD_SIGNING_TOOL "Build signing tool" ON)
-option(USE_OPENSSL "Use OpenSSL for signing tool" ON)
-option(USE_MBEDTLS "Use MbedTLS for signing tool" OFF)
+# Crypto feature selection
+option(BOOTROM_ENABLE_AES "Enable AES encryption/decryption" ON)
+option(BOOTROM_ENABLE_RSA "Enable RSA signature verification" ON)
+option(BOOTROM_ENABLE_ECC "Enable ECC/ECDSA signature verification" ON)
+option(BOOTROM_ENABLE_SHA256 "Enable SHA-256 hash" ON)
+option(BOOTROM_ENABLE_SHA512 "Enable SHA-512 hash" OFF)
 
-# 1. C Standard Configuration
+# Build quality
+option(BOOTROM_SECURE_BOOT "Enable secure boot features" ON)
+option(BOOTROM_ENABLE_LTO "Enable link-time optimization" ON)
+option(BOOTROM_DEV_MODE "Enable BootROM dev mode" ON)
+
+# Force SHA256 if RSA or ECC is enabled
+if(BOOTROM_ENABLE_RSA OR BOOTROM_ENABLE_ECC)
+    set(BOOTROM_ENABLE_SHA256 ON CACHE BOOL "" FORCE)
+endif()
+
+# Validate secure boot requirements
+if(BOOTROM_SECURE_BOOT AND NOT (BOOTROM_ENABLE_RSA OR BOOTROM_ENABLE_ECC))
+    message(FATAL_ERROR "Secure boot requires RSA or ECC signature verification enabled.")
+endif()
+
+# =============================================================================
+# 1. C Standard
+# =============================================================================
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# =============================================================================
 # 2. Target Architecture (ARM Cortex-R5F)
-# -mcpu=cortex-r5: Target the R5 core
-# -mthumb: Generate Thumb instructions (preferred for code density)
-# -mfloat-abi=hard: Use hardware FPU registers
-# -mfpu=vfpv3-d16: Specify the FPU unit available on the SoC
+# =============================================================================
+# -mcpu=cortex-r5       : Target ARM Cortex-R5
+# -mthumb               : Generate Thumb-2 code (better code density)
+# -mfloat-abi=hard      : Use hardware FPU registers
+# -mfpu=vfpv3-d16       : Specify available FPU
 set(CPU_FLAGS "-mcpu=cortex-r5 -mthumb -mfloat-abi=hard -mfpu=vfpv3-d16")
 
-# 3. Compiler Options
-# -g3: Generate maximum debug information for GDB
-# -ffunction-sections -fdata-sections: Allow linker to remove unused code
-set(COMMON_FLAGS "${CPU_FLAGS} -Wall -Wextra -Wpedantic -Wno-implicit-function-declaration -ffunction-sections -fdata-sections -fno-builtin -fno-strict-aliasing")
+# =============================================================================
+# 3. Compiler Options (BootROM-grade hygiene)
+# =============================================================================
+# -Wall -Wextra -Wpedantic            : Strict warnings
+# -ffunction-sections -fdata-sections : Place each function/data into its own section for linker GC
+# -fno-builtin                        : Do not emit compiler builtin libc calls
+# -fno-strict-aliasing                : Avoid UB in low-level MMIO / type-punning code
+# -fno-stack-protector                : Do not emit stack canary (__stack_chk_fail)
+# -fno-unwind-tables                  : Do not emit exception unwind tables
+# -fno-asynchronous-unwind-tables     : Do not emit async unwind info (.ARM.exidx)
+# -fno-common                         : Enforce proper global definitions
+set(COMMON_FLAGS
+    "${CPU_FLAGS} -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -fno-builtin -fno-strict-aliasing -fno-stack-protector -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-common -fvisibility=hidden"
+)
 
-# Feature compilation flags
+# =============================================================================
+# Feature-related compile definitions
+# =============================================================================
+
 if(ENABLE_QEMU_SEMIHOSTING)
-    add_compile_definitions(QEMU_SEMIHOSTING)
+    add_compile_definitions(BOOTROM_USE_SEMIHOSTING)
 endif()
 
-if(ENABLE_DEBUG_LOGGING)
-    add_compile_definitions(DEBUG_LOGGING)
+if(BOOTROM_SECURE_BOOT)
+    add_compile_definitions(BOOTROM_USE_SECURE_BOOT)
 endif()
 
-if(ENABLE_CRYPTO_ACCEL)
-    add_compile_definitions(CRYPTO_ACCELERATION)
-endif()
-
-if(ENABLE_SECURE_DEBUG)
-    add_compile_definitions(SECURE_DEBUG)
+if(BOOTROM_DEV_MODE)
+    add_compile_definitions(BOOTROM_DEV_MODE)
 endif()
 
 if(BUILD_TESTING)
@@ -64,39 +98,61 @@ if(BUILD_TESTING)
     enable_testing()
 endif()
 
+# =============================================================================
+# Optimization level
+# =============================================================================
+
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    # Debug Build: No optimization (-O0), full debug symbols
+    # Debug: no optimization, full symbols
     add_compile_options(-g3 -O0 -DDEBUG)
 else()
-    # Release Build: Optimize for size (-Os)
+    # Release: optimize for size
     add_compile_options(-Os -DNDEBUG)
+endif()
+
+# Enable LTO in release builds
+if(BOOTROM_ENABLE_LTO AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-flto)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
 endif()
 
 set(CMAKE_C_FLAGS "${COMMON_FLAGS} -std=c11")
 set(CMAKE_ASM_FLAGS "${CPU_FLAGS} -x assembler-with-cpp")
 
+# =============================================================================
 # 4. Linker Options
-# -nostdlib: Do not link standard system startup files
-# --gc-sections: Remove unused sections to save ROM space
-# --print-memory-usage: Display RAM/ROM usage after build
-set(CMAKE_EXE_LINKER_FLAGS "${CPU_FLAGS} -T ${CMAKE_SOURCE_DIR}/bootrom/arch/arm/r5f/linker.ld -nostdlib -Wl,--gc-sections -Wl,--print-memory-usage")
+# =============================================================================
+# -nostdlib            : Do not link any system libraries
+# -nostartfiles        : Do not use CRT startup files
+# --gc-sections        : Remove unused sections
+# --print-memory-usage : Print memory usage
+# -Map                 : Generate map file
+set(CMAKE_EXE_LINKER_FLAGS
+    "${CPU_FLAGS} -T ${CMAKE_SOURCE_DIR}/bootrom/arch/arm/r5f/linker.ld -nostdlib -nostartfiles -Wl,--gc-sections -Wl,--print-memory-usage -Wl,-Map=bootrom.map"
+)
 
+# =============================================================================
 # 5. Include Directories
+# =============================================================================
 include_directories(
-    ${CMAKE_SOURCE_DIR}/bootrom/secure_boot  # Put secure_boot first to prioritize our config
+    ${CMAKE_SOURCE_DIR}/bootrom/secure_boot
     ${CMAKE_SOURCE_DIR}/bootrom
     ${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/include
     ${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library
 )
 
-# Definitions for mbedTLS - Use absolute path to our config
+# =============================================================================
+# mbedTLS Configuration
+# =============================================================================
 add_compile_definitions(MBEDTLS_CONFIG_FILE="${CMAKE_SOURCE_DIR}/bootrom/secure_boot/mbedtls_config.h")
 add_compile_definitions(MBEDTLS_USE_PSA_CRYPTO=0)
 add_compile_definitions(MBEDTLS_PSA_CRYPTO_CLIENT=0)
 add_compile_definitions(MBEDTLS_PLATFORM_STD_SNPRINTF=mbedtls_platform_snprintf)
 
-# 6. Source Files
-set(SOURCES
+# =============================================================================
+# 6. BootROM sources
+# =============================================================================
+set(BOOTROM_SOURCES
     bootrom/main.c
     bootrom/arch/arm/r5f/startup.S
     bootrom/platform/platform.c
@@ -107,143 +163,116 @@ set(SOURCES
     bootrom/crypto/crypto_wrapper.c
 )
 
-# --- IMPORTANT: mbedTLS Integration ---
-file(GLOB MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/*.c")
+# =============================================================================
+# 7. mbedTLS minimal commercial subset (feature-based)
+# =============================================================================
 
-# --- EXCLUDE FILES INCOMPATIBLE WITH BARE-METAL ---
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/net_sockets.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/timing.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_storage.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_its_file.c")
+set(MBEDTLS_DIR ${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library)
 
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/lms.c")
+set(MBEDTLS_MINIMAL_SOURCES
+    # Core
+    # ${MBEDTLS_DIR}/platform_util.c
+    # ${MBEDTLS_DIR}/platform.c
+    ${MBEDTLS_DIR}/constant_time.c
+    # ${MBEDTLS_DIR}/memory_buffer_alloc.c
+    # ${MBEDTLS_DIR}/base64.c
+    # Big number
+    ${MBEDTLS_DIR}/bignum.c
+    ${MBEDTLS_DIR}/bignum_core.c
+    ${MBEDTLS_DIR}/bignum_mod.c
+    ${MBEDTLS_DIR}/bignum_mod_raw.c
+    # Hashing
+    ${MBEDTLS_DIR}/md.c
+    # AS1N.1 and PK parsing
+    # ${MBEDTLS_DIR}/asn1parse.c
+    # ${MBEDTLS_DIR}/asn1write.c
+    # OID / PEM / PK
+    # ${MBEDTLS_DIR}/oid.c
+    # ${MBEDTLS_DIR}/pem.c
+    # ${MBEDTLS_DIR}/pk.c
+    # ${MBEDTLS_DIR}/pk_wrap.c
+    # ${MBEDTLS_DIR}/pkparse.c
+    # ${MBEDTLS_DIR}/pk_ecc.c
+)
 
-# --- EXCLUDE X.509 FILES (not needed for BootROM) ---
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/x509_crt.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/x509_crl.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/x509_csr.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/x509.c")
-# list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/pem.c")  # Keep for pkparse
-# list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/base64.c")  # Keep for pem
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/x509_create.c")
+# if(BOOTROM_DEV_MODE)
+#     list(APPEND MBEDTLS_MINIMAL_SOURCES
+#         ${MBEDTLS_DIR}/x509_crt.c
+#     )
+#     add_compile_definitions(BOOTROM_DEV_MODE)
+# endif()
 
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_util.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/x509write_crt.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/x509write_csr.c")
-
-# --- EXCLUDE UNUSED CIPHERS AND MODULES ---
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/aria.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/camellia.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/des.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/chacha20.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/chachapoly.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/poly1305.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/ripemd160.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/sha1.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/sha3.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/sha512.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/md5.c")
-# list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/md.c")  # Keep for md functions
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/padlock.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/aesce.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/aesni.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/ecdsa.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/lmots.c")
-
-# --- EXCLUDE ENTROPY AND RNG (using null entropy) ---
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/entropy.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/entropy_poll.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/ctr_drbg.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/hmac_drbg.c")
-
-# --- EXCLUDE UNUSED PK MODULES ---
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/pkcs12.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/pkcs5.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/pkcs7.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/ecjpake.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/dhm.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/ecdh.c")
-# list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/oid.c")  # Include for OID functions
-# list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/pk_wrap.c")  # Include for info structs
-
-# --- EXCLUDE DEBUG AND UTILITY MODULES ---
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/debug.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/error.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/version.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/version_features.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/threading.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/mps_reader.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/mps_trace.c")
-# list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/constant_time.c")  # Keep for ct functions
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/nist_kw.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/hkdf.c")
-
-# --- EXCLUDE PSA DRIVERS AND UNUSED ---
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_driver_wrappers_no_static.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_ffdh.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_pake.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_se.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_slot_management.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_aead.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_cipher.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_client.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_ecp.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_hash.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_mac.c")
-list(REMOVE_ITEM MBEDTLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/psa_crypto_rsa.c")
-
-file(GLOB TLS_SOURCES "${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/library/ssl_*.c")
-foreach(tls_file ${TLS_SOURCES})
-    list(REMOVE_ITEM MBEDTLS_SOURCES ${tls_file})
-endforeach()
-
-list(APPEND SOURCES ${MBEDTLS_SOURCES})
-
-# Build MbedTLS as static library if requested
-if(BUILD_MBEDTLS_LIB)
-    add_library(mbedtls STATIC ${MBEDTLS_SOURCES})
-    target_include_directories(mbedtls PUBLIC ${CMAKE_SOURCE_DIR}/bootrom/external/mbedtls/include)
-    target_compile_definitions(mbedtls PRIVATE MBEDTLS_CONFIG_FILE="${CMAKE_SOURCE_DIR}/bootrom/secure_boot/mbedtls_config.h")
-    target_compile_definitions(mbedtls PRIVATE MBEDTLS_USE_PSA_CRYPTO=0)
-    target_compile_definitions(mbedtls PRIVATE MBEDTLS_PSA_CRYPTO_CLIENT=0)
+if(BOOTROM_ENABLE_AES)
+    list(APPEND MBEDTLS_MINIMAL_SOURCES
+        ${MBEDTLS_DIR}/aes.c
+        ${MBEDTLS_DIR}/cipher.c
+        ${MBEDTLS_DIR}/cipher_wrap.c
+    )
+    add_compile_definitions(BOOTROM_ENABLE_AES)
 endif()
 
-# ============================================================================
-# Build Targets
-# ============================================================================
+if(BOOTROM_ENABLE_RSA)
+    list(APPEND MBEDTLS_MINIMAL_SOURCES
+        ${MBEDTLS_DIR}/rsa.c
+        ${MBEDTLS_DIR}/rsa_alt_helpers.c
+    )
+    add_compile_definitions(BOOTROM_ENABLE_RSA)
+endif()
 
-# BootROM firmware
+if(BOOTROM_ENABLE_ECC)
+    list(APPEND MBEDTLS_MINIMAL_SOURCES
+        ${MBEDTLS_DIR}/ecp.c
+        ${MBEDTLS_DIR}/ecp_curves.c
+        ${MBEDTLS_DIR}/ecdsa.c
+    )
+    add_compile_definitions(BOOTROM_ENABLE_ECC)
+endif()
+
+if(BOOTROM_ENABLE_SHA256)   
+    list(APPEND MBEDTLS_MINIMAL_SOURCES
+        ${MBEDTLS_DIR}/sha256.c
+    )
+    add_compile_definitions(BOOTROM_ENABLE_SHA256)
+endif()
+
+if(BOOTROM_ENABLE_SHA512)
+    list(APPEND MBEDTLS_MINIMAL_SOURCES
+        ${MBEDTLS_DIR}/sha512.c
+    )
+    add_compile_definitions(BOOTROM_ENABLE_SHA512)
+endif()
+
+# =============================================================================
+# Final sources
+# =============================================================================
+set(SOURCES
+    ${BOOTROM_SOURCES}
+    ${MBEDTLS_MINIMAL_SOURCES}
+)
+
+# =============================================================================
+# Build targets
+# =============================================================================
+
 if(BUILD_BOOTROM)
     add_executable(bootrom.elf ${SOURCES})
 endif()
 
-# Unit tests
 if(BUILD_TESTING)
     add_executable(test_runner
         bootrom/tests/test_main.c
         bootrom/tests/test_crypto.c
         bootrom/tests/test_secure_boot.c
         bootrom/tests/test_framework.c
-        bootrom/platform/platform.c
-        bootrom/drivers/uart.c
-        bootrom/drivers/flash.c
-        bootrom/drivers/watchdog.c
-        bootrom/secure_boot/secure_boot_core.c
-        bootrom/crypto/crypto_wrapper.c
-        ${MBEDTLS_SOURCES}
+        ${SOURCES}
     )
     target_compile_definitions(test_runner PRIVATE UNIT_TESTING)
     add_test(NAME unit_tests COMMAND test_runner)
 endif()
 
-# 7. Executable Target (legacy - kept for compatibility)
-if(NOT BUILD_BOOTROM AND NOT BUILD_TESTING)
-    add_executable(bootrom.elf ${SOURCES})
-endif()
-
-# 8. Tool Discovery
-# Ensure objcopy/objdump are found for post-build steps
+# =============================================================================
+# Tool discovery
+# =============================================================================
 if(NOT CMAKE_OBJCOPY)
     find_program(CMAKE_OBJCOPY arm-none-eabi-objcopy)
 endif()
@@ -252,22 +281,34 @@ if(NOT CMAKE_OBJDUMP)
     find_program(CMAKE_OBJDUMP arm-none-eabi-objdump)
 endif()
 
-# 9. Post-build Actions
-# Generate Binary (.bin), Hex (.hex), and Disassembly (.dis) files
+# =============================================================================
+# Post-build
+# =============================================================================
 if(BUILD_BOOTROM)
     add_custom_command(TARGET bootrom.elf POST_BUILD
         COMMAND ${CMAKE_OBJCOPY} -O binary bootrom.elf bootrom.bin
         COMMAND ${CMAKE_OBJCOPY} -O ihex bootrom.elf bootrom.hex
         COMMAND ${CMAKE_OBJDUMP} -d bootrom.elf > bootrom.dis
-        COMMENT "Post-build: Generating binary, hex, and disassembly files..."
+        COMMAND arm-none-eabi-size bootrom.elf
+        COMMENT "Post-build: Generating bin/hex/dis and printing size..."
     )
 endif()
 
-# Print Build Configuration Status
+# =============================================================================
+# Build summary
+# =============================================================================
 message(STATUS "-------------------------------------------------")
 message(STATUS "Build Configuration Summary:")
 message(STATUS "  Build Type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Compiler:        ${CMAKE_C_COMPILER}")
 message(STATUS "  Target CPU:      Cortex-R5F")
+message(STATUS "  Secure Boot:     ${BOOTROM_SECURE_BOOT}")
+message(STATUS "  AES:             ${BOOTROM_ENABLE_AES}")
+message(STATUS "  RSA:             ${BOOTROM_ENABLE_RSA}")
+message(STATUS "  ECC:             ${BOOTROM_ENABLE_ECC}")
+message(STATUS "  SHA256:          ${BOOTROM_ENABLE_SHA256}")
+message(STATUS "  SHA512:          ${BOOTROM_ENABLE_SHA512}")
+message(STATUS "  LTO:             ${BOOTROM_ENABLE_LTO}")
+message(STATUS "  DEV_MODE:        ${BOOTROM_DEV_MODE}")
 message(STATUS "  Linker Script:   bootrom/arch/arm/r5f/linker.ld")
 message(STATUS "-------------------------------------------------")

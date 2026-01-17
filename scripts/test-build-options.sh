@@ -93,8 +93,8 @@ test_signing_tool_build() {
     cd build
 
     cmake \
-        -DUSE_OPENSSL=ON \
-        -DUSE_MBEDTLS=OFF \
+        -DBOOT_SIGNER_USE_OPENSSL=ON \
+        -DBOOT_SIGNER_USE_MBEDTLS=OFF \
         ..
 
     make -j"$(nproc)"
