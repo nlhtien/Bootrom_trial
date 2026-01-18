@@ -2,13 +2,6 @@
 
 This directory contains architecture-specific code for the BootROM, currently supporting ARM Cortex-R5F.
 
-## Contents
+1. The startup code sets up the execution environment before calling `main()` in `bootrom/main.c`.</content>
 
-  - `arm/r5f/`: ARM Cortex-R5F specific implementation
-  - `startup.S`: Assembly startup code for Stages 1 & 2 (hardware init, watchdog disable, stack setup)
-  - `linker.ld`: Linker script defining memory layout
-  - `sys_registers.h`: System register definitions
-  - `CMakeLists.txt`: Build configuration for ARM R5F
-
-The startup code sets up the execution environment before calling `main()` in `bootrom/main.c`.</content>
-<parameter name="filePath">/home/kora/tiennlh/project/Bootrom_trial/bootrom/arch/README.md
+2. Folder platform is support function C for the start up code on Stage 2.</content>

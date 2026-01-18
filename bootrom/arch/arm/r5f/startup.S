@@ -35,11 +35,21 @@ _vector_table:
 .extern _svc_stack_top
 .extern _abt_stack_top
 .extern _und_stack_top
+.extern _stack_bottom
+.extern _irq_stack_bottom
+.extern _fiq_stack_bottom
+.extern _svc_stack_bottom
+.extern _abt_stack_bottom
+.extern _und_stack_bottom
 .extern _data_load_addr
 .extern _data_start
 .extern _data_end
 .extern _bss_start
 .extern _bss_end
+.extern _heap_start
+.extern _heap_end
+.extern _text_start
+.extern _text_end
 
 /* ============================================================================
  * STAGE 1: Power On Reset & Startup
@@ -65,10 +75,12 @@ reset_handler:
      *    MPIDR[1:0] = 0 for primary core
      * ============================================ */
     @ For QEMU testing: Skip multi-core check
-    @ mrc p15, 0, r0, c0, c0, 5    /* Read MPIDR */
-    @ ands r0, r0, #0x03           /* Extract Affinity Level 0 (Core ID) */
-    @ bne secondary_core_loop      /* If not 0, this is a secondary core */
-    
+    #ifndef BOOTROM_DEV_MODE
+        mrc p15, 0, r0, c0, c0, 5    /* Read MPIDR */
+        ands r0, r0, #0x03           /* Extract Affinity Level 0 (Core ID) */
+        bne secondary_core_loop      /* If not 0, this is a secondary core */
+    #endif
+
     /* Primary core continues */
     b primary_core_continue
     
@@ -112,12 +124,16 @@ primary_core_continue:
     mcr p15, 0, r0, c7, c5, 0    /* ICIALLU - Invalidate I-Cache */
     isb
     
-    /* Invalidate D-Cache */
-    bl invalidate_dcache_all
+    /* Invalidate D-Cache - Temporaty */
+    /* Need to add loop - invalidate_dcache_all */
+    mov r0, #0
+    mcr p15, 0, r0, c15, c5, 0    /* DCIALLU - Invalidate D-Cache */
+    dsb
+    isb
     
     /* Disable Branch Prediction */
     mrc p15, 0, r0, c1, c0, 0    /* Read SCTLR */
-    bic r0, r0, #(1 << 11)       /* Clear Z bit (Branch prediction) */
+    bic r0, r0, #(1 << 11)       /* Clear Z bit (Branch prediction enable bit) */
     mcr p15, 0, r0, c1, c0, 0    /* Write SCTLR */
     isb
     
@@ -131,9 +147,10 @@ primary_core_continue:
     mrc p15, 0, r0, c1, c0, 2    /* Read CPACR */
     orr r0, r0, #(0xF << 20)     /* Enable CP10 and CP11 */
     mcr p15, 0, r0, c1, c0, 2    /* Write CPACR */
-    isb                           /* Instruction Synchronization Barrier */
-    mov r0, #0x40000000          /* Enable VFP */
-    vmsr fpexc, r0
+    isb                          /* Instruction Synchronization Barrier */
+    vmrs	r3, FPEXC
+    orr	r0, r3, #(1<<30)          /* Enable VFP - bit 30 */
+    vmsr FPEXC, r0
 
     /* ============================================
      * 2. Stack Setup: Initialize SP for ALL ARM Modes
@@ -186,7 +203,7 @@ clear_bss_loop:
 bss_cleared:
     
     /* ============================================
-     * 4. Copy initialized data from ROM to RAM
+     * 4. Copy initialized data from ROM to OCRAM
      * ============================================ */
     ldr r0, =_data_load_addr
     ldr r1, =_data_start
@@ -203,6 +220,7 @@ data_copied:
      * 5. TCM & ECC Init: Enable ATCM and BTCM, Zeroize for ECC
      * ============================================ */
     bl tcm_init_and_zeroize
+    /* bl ocram_init */
     
     /* ============================================
      * 6. MPU Setup: Define memory regions
@@ -217,6 +235,7 @@ data_copied:
     /* ============================================
      * 8. Vector Table Remap: Physical Remap TCM/OCM at 0x0
      * ============================================ */
+    
     bl remap_vector_table
     
     /* ============================================
@@ -269,23 +288,6 @@ fiq_handler:
 /* ============================================================================
  * Helper Functions
  * ============================================================================ */
-
-/**
- * @brief Invalidate entire D-Cache
- * Simplified implementation using DCIALL (Data Cache Invalidate All)
- */
-.thumb_func
-invalidate_dcache_all:
-    push {r0, lr}
-    
-    /* Invalidate entire D-Cache using DCIALL */
-    mov r0, #0
-    mcr p15, 0, r0, c7, c14, 6   /* DCIALL - Data Cache Invalidate All to PoU */
-    
-    dsb
-    isb
-    
-    pop {r0, pc}
 
 /* External C functions */
 .extern watchdog_disable

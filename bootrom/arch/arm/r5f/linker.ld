@@ -2,8 +2,8 @@
  * @file linker.ld
  * @brief Linker Script for ARM Cortex-R5F BootROM
  * * Memory Layout:
- * - BOOT_ROM: Boot ROM region (read-only code and data)
- * - OCRAM:    On-Chip RAM / DDR (Large data, buffers, heap)
+ * - ROM:      Boot ROM region (read-only code and data)
+ * - OCRAM:    On-Chip RAM (Large data, buffers, heap)
  * - TCM:      Tightly Coupled Memory (Critical stacks for performance)
  */
 
@@ -11,25 +11,25 @@ ENTRY(reset_handler)
 
 MEMORY
 {
-    /* ROM: Boot code storage (256KB) */
-    BOOT_ROM (rx) : ORIGIN = 0x00000000, LENGTH = 256K
+    /* ROM: BootROM code storage (256KB) */
+    ROM (rx)      : ORIGIN = 0x00000000, LENGTH = 256K
     
-    /* OCRAM: Increased to 1MB to hold MbedTLS buffers (Decrypted Image ~256KB) */
+    /* OCRAM: Data, bss, heap, buffer, image Decrypted */
     /* Note: Address 0x08000000 is typical for QEMU/SoC RAM */
     OCRAM (rwx)   : ORIGIN = 0x08000000, LENGTH = 1M
     
-    /* TCM: Used for high-speed stacks (64KB) */
+    /* TCM: Stacks mode CPU (64KB) */
     TCM (rwx)     : ORIGIN = 0x00200000, LENGTH = 64K
 }
 
 /* Stack sizes configuration */
-_irq_stack_size = 0x400;   /* 1KB */
-_fiq_stack_size = 0x400;   /* 1KB */
-_svc_stack_size = 0x400;   /* 1KB */
-_abt_stack_size = 0x400;   /* 1KB */
-_und_stack_size = 0x400;   /* 1KB */
-_sys_stack_size = 0x1000;  /* 4KB */
-_heap_size = 0x1000;       /* 4KB */
+_irq_stack_size = 0x1000;   /* 4KB */
+_fiq_stack_size = 0x1000;   /* 4KB */
+_svc_stack_size = 0x1000;   /* 4KB */
+_abt_stack_size = 0x1000;   /* 4KB */
+_und_stack_size = 0x1000;   /* 4KB */
+_sys_stack_size = 0x1000;   /* 4KB */
+_heap_size = 0x1000;        /* 4KB */
 
 SECTIONS
 {
@@ -37,7 +37,7 @@ SECTIONS
     .vectors :
     {
         KEEP(*(.vectors))
-    } > BOOT_ROM
+    } > ROM
 
     /* Code section */
     .text :
@@ -48,35 +48,23 @@ SECTIONS
         *(.rodata*)      /* Read-only data */
         . = ALIGN(4);
         _text_end = .;
-    } > BOOT_ROM
+    } > ROM
 
-    /* Exception unwinding tables */
-    .ARM.extab :
-    {
-        *(.ARM.extab*)
-    } > BOOT_ROM
-
-    .ARM.exidx :
-    {
-        __exidx_start = .;
-        *(.ARM.exidx*)
-        __exidx_end = .;
-    } > BOOT_ROM
-
-    /* Initialized data (Stored in ROM, Copied to OCRAM at startup) */
+    /* Initialized data */
     /* MOVED TO OCRAM to save TCM space */
-    _data_load_addr = LOADADDR(.data);
-    .data : AT(ADDR(.ARM.exidx) + SIZEOF(.ARM.exidx))
+    .data : AT> ROM
     {
         _data_start = .;
         *(.data*)
         . = ALIGN(4);
         _data_end = .;
     } > OCRAM 
+    _data_load_addr = LOADADDR(.data);
+
 
     /* Uninitialized data (BSS) */
     /* MOVED TO OCRAM: This contains the large MbedTLS buffers */
-    .bss :
+    .bss (NOLOAD):
     {
         _bss_start = .;
         *(.bss*)
