@@ -1,6 +1,6 @@
 /**
  * @file platform.h
- * @brief Platform Abstraction Layer
+ * @brief Platform interface for BootROM / FSBL (Cortex-R5)
  */
 
 #ifndef PLATFORM_H
@@ -10,48 +10,49 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-/* Interrupt control */
-static inline void __disable_irq(void)
+/* IRQ control */
+static inline void cpu_disable_irq(void)
 {
-    __asm volatile ("cpsid i" : : : "memory");
+    __asm volatile ("cpsid i" ::: "memory");
 }
 
-static inline void __enable_irq(void)
+static inline void cpu_enable_irq(void)
 {
-    __asm volatile ("cpsie i" : : : "memory");
+    __asm volatile ("cpsie i" ::: "memory");
 }
 
-static inline void __NOP(void)
+static inline void cpu_nop(void)
 {
     __asm volatile ("nop");
 }
 
-/* Platform initialization */
+/* Platform init */
 void platform_init(void);
 
-/* Watchdog control */
+/* Watchdog */
 void watchdog_disable(void);
 
 /* Reset cause */
 uint32_t platform_get_reset_cause(void);
 
-/* TCM and ECC initialization */
+/* TCM + ECC */
 void tcm_init_and_zeroize(void);
 
-/* MPU setup */
+/* MPU */
 void mpu_setup(void);
 
-/* Cache control */
+/* Cache */
 void enable_caches(void);
+void platform_disable_mpu_cache(void);
 
-/* Vector table remap */
+/* Vector table */
 void remap_vector_table(void);
 
-/* IRQ/FIQ handlers (called from assembly) */
+/* IRQ / FIQ handlers */
 void platform_irq_handler(void);
 void platform_fiq_handler(void);
 
-/* Delay functions */
+/* Delay */
 void platform_delay_us(uint32_t us);
 void platform_delay_ms(uint32_t ms);
 

@@ -13,18 +13,18 @@
 #define ATCM_SIZE    0x00008000  /* 32KB */
 #define BTCM_BASE    0x20000000
 #define BTCM_SIZE    0x00008000  /* 32KB */
+#define ROM_BASE     0x00000000
+#define ROM_SIZE     0x00010000  /* 64KB */
 #define OCRAM_BASE   0x08000000
 #define OCRAM_SIZE   0x00010000  /* 64KB */
+#define PERIPH_BASE  0x40000000
+#define PERIPH_SIZE  0x20000000  /* 512MB */
 
 /* MPU Region Definitions */
-#define MPU_REGION_FLASH      0
+#define MPU_REGION_ROM        0
 #define MPU_REGION_OCRAM      1
 #define MPU_REGION_PERIPH     2
 
-#define MPU_RBAR(region, addr) ((addr & 0xFFFFFFE0) | (region & 0xF))
-#define MPU_RASR(enable, ap, s, c, b, srd, size) \
-    ((enable << 0) | (ap << 8) | (s << 18) | (c << 17) | (b << 16) | \
-     (srd << 8) | ((size - 1) << 1) | (1 << 0))
 
 /**
  * @brief Disable watchdog (stub - platform-specific implementation)
@@ -48,39 +48,105 @@ uint32_t platform_get_reset_cause(void)
 }
 
 /**
+ * @brief Disable MPU, caches and branch prediction
+ */
+void platform_disable_mpu_cache(void)
+{
+    uint32_t sctlr = cp15_read_sctlr();
+    sctlr &= ~(1 << 0);  // MPU
+    sctlr &= ~(1 << 2);  // D-cache
+    sctlr &= ~(1 << 12); // I-cache
+    sctlr &= ~(1 << 11); // BP
+    cp15_write_sctlr(sctlr);
+
+    /* Invalidate caches */
+    __asm volatile ("mcr p15, 0, %0, c7, c5, 0" :: "r"(0));  // ICIALLU
+    __asm volatile ("mcr p15, 0, %0, c15, c5, 0" :: "r"(0)); // DCIALLU
+
+    dsb(); isb();
+}
+
+/**
+ * @brief Enable FPU
+ */
+void platform_enable_fpu(void)
+{
+    uint32_t val = cp15_read_cpacr();
+    val |= (0xF << 20); // CP10 CP11
+    cp15_write_cpacr(val);
+
+    __asm volatile (
+        "vmrs r0, FPEXC\n"
+        "orr  r0, r0, #(1<<30)\n"
+        "vmsr FPEXC, r0\n"
+    );
+}
+
+/**
  * @brief Initialize TCM and zeroize for ECC initialization
  * CRITICAL: Write zeros to entire TCM to initialize ECC logic
  */
 void tcm_init_and_zeroize(void)
 {
-    uint32_t *addr;
-    uint32_t i;
-    
-    /* Enable ATCM via CP15 c9 */
-    /* TCMCR - TCM Control Register (platform-specific, this is a stub) */
-    /* Example: mcr p15, 0, <val>, c9, c1, 0 */
-    
-    /* Zeroize ATCM */
-    addr = (uint32_t *)ATCM_BASE;
-    for (i = 0; i < (ATCM_SIZE / 4); i++) {
-        addr[i] = 0;
+    uint32_t val;
+    volatile uint32_t *p;
+
+    /* =========================
+     * Enable ATCM + BTCM
+     * ========================= */
+
+    val = cp15_read_tcmcr();
+    /* Enable ATCM (bit0) */
+    val |= (1 << 0);
+    /* Enable BTCM (bit1) */
+    val |= (1 << 1);
+    cp15_write_tcmcr(val);
+
+    /* =========================
+     * Enable RMW for TCM
+     * ========================= */
+
+    val = cp15_read_sacr();
+    val |= 0x3;   /* ATCMRMW | BTCMRMW */
+    cp15_write_sacr(val);
+    dsb();
+    isb();
+
+    /* =========================
+     * Zeroize ATCM (for ECC)
+     * ========================= */
+    p = (uint32_t *)ATCM_BASE;
+    for (uint32_t i = 0; i < ATCM_SIZE / 4; i++) {
+        p[i] = 0;
     }
-    
-    /* Enable BTCM via CP15 c9 */
-    /* Example: mcr p15, 0, <val>, c9, c1, 1 */
-    
-    /* Zeroize BTCM */
-    addr = (uint32_t *)BTCM_BASE;
-    for (i = 0; i < (BTCM_SIZE / 4); i++) {
-        addr[i] = 0;
+
+    /* =========================
+     * Zeroize BTCM (for ECC)
+     * ========================= */
+    p = (uint32_t *)BTCM_BASE;
+    for (uint32_t i = 0; i < BTCM_SIZE / 4; i++) {
+        p[i] = 0;
     }
-    
-    /* Zeroize OCRAM (if used) */
-    addr = (uint32_t *)OCRAM_BASE;
-    for (i = 0; i < (OCRAM_SIZE / 4); i++) {
-        addr[i] = 0;
-    }
-    
+
+    dsb();
+    isb();
+
+    /* =========================
+     * Enable ECC check in ACTLR
+     * ========================= */
+
+    val = cp15_read_actlr();
+    val |= (1 << 27); /* B1TCM ECC */
+    val |= (1 << 26); /* B0TCM ECC */
+    val |= (1 << 25); /* ATCM ECC */
+
+    /* Disable parity aborts like ASM */
+    val &= ~(1 << 5);
+    val &= ~(1 << 4);
+    val &= ~(1 << 3);
+
+    cp15_write_actlr(val);
+
     dsb();
     isb();
 }
@@ -90,32 +156,83 @@ void tcm_init_and_zeroize(void)
  */
 void mpu_setup(void)
 {
-    uint32_t sctlr;
-    
-    /* Disable MPU temporarily */
-    sctlr = read_sctlr();
-    sctlr &= ~(1 << 0);  /* Clear M bit */
-    write_sctlr(sctlr);
-    
-    /* Region 0: Flash (BOOT_ROM) - Read/Execute, Normal, Cacheable */
-    /* Base: 0x00000000, Size: 64KB (2^16), Region: 0 */
-    __asm volatile ("mcr p15, 0, %0, c6, c0, 0" : : "r" (0x00000000));  /* RBAR */
-    __asm volatile ("mcr p15, 0, %0, c6, c0, 1" : : "r" (MPU_RASR(1, 0x3, 1, 1, 1, 0, 16)));  /* RASR */
-    
-    /* Region 1: OCRAM - Read/Write/Execute, Normal, Cacheable */
-    /* Base: 0x08000000, Size: 64KB (2^16), Region: 1 */
-    __asm volatile ("mcr p15, 0, %0, c6, c1, 0" : : "r" (0x08000000));  /* RBAR */
-    __asm volatile ("mcr p15, 0, %0, c6, c1, 1" : : "r" (MPU_RASR(1, 0x3, 1, 1, 1, 0, 16)));  /* RASR */
-    
-    /* Region 2: Peripherals - Read/Write, Device, Non-cacheable */
-    /* Base: 0x40000000, Size: 512MB (2^29), Region: 2 */
-    __asm volatile ("mcr p15, 0, %0, c6, c2, 0" : : "r" (0x40000000));  /* RBAR */
-    __asm volatile ("mcr p15, 0, %0, c6, c2, 1" : : "r" (MPU_RASR(1, 0x3, 0, 0, 0, 0, 29)));  /* RASR */
-    
-    /* Enable MPU */
-    sctlr = read_sctlr();
-    sctlr |= (1 << 0);   /* Set M bit */
-    write_sctlr(sctlr);
+    uint32_t val;
+
+    /* =========================
+     * Disable MPU
+     * ========================= */
+    val = cp15_read_sctlr();
+    val &= ~(1 << 0);
+    cp15_write_sctlr(val);
+
+    /* =========================
+     * Region 0: ROM @0x00000000 64KB
+     * ========================= */
+
+    /* Select region 0 */
+    __asm volatile ("mcr p15, 0, %0, c6, c2, 0" :: "r"(MPU_REGION_ROM));
+
+    /* Base */
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 0" :: "r"(ROM_BASE));
+
+    /* Size + enable (64KB = 0x0F) */
+    __asm volatile ("mrc p15, 0, %0, c6, c1, 2" : "=r"(val));
+    val &= ~(0x0F << 1);
+    val |= (0x0F << 1) | 1;
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 2" :: "r"(val));
+
+    /* Attributes */
+    __asm volatile ("mrc p15, 0, %0, c6, c1, 4" : "=r"(val));
+    val &= ~(0xFFFFFFFF);
+    val |= (0x5 << 8); /* RO */
+    val |= (0x1 << 3); /* Normal */
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 4" :: "r"(val));
+
+    /* =========================
+     * Region 1: OCRAM @0x08000000
+     * ========================= */
+    __asm volatile ("mcr p15, 0, %0, c6, c2, 0" :: "r"(MPU_REGION_OCRAM));
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 0" :: "r"(OCRAM_BASE));
+
+    __asm volatile ("mrc p15, 0, %0, c6, c1, 2" : "=r"(val));
+    val &= ~(0x0F << 1);
+    val |= (0x0F << 1) | 1;
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 2" :: "r"(val));
+
+    __asm volatile ("mrc p15, 0, %0, c6, c1, 4" : "=r"(val));
+    val &= ~(0xFFFFFFFF);
+    val |= (0x3 << 8); /* Full access */
+    val |= (0x0 << 3); /* Normal */
+    val |= (0x2 << 0); /* Cacheable */
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 4" :: "r"(val));
+
+    /* =========================
+     * Region 2: PERIPH @0x40000000
+     * ========================= */
+    __asm volatile ("mcr p15, 0, %0, c6, c2, 0" :: "r"(MPU_REGION_PERIPH));
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 0" :: "r"(PERIPH_BASE));
+
+    __asm volatile ("mrc p15, 0, %0, c6, c1, 2" : "=r"(val));
+    val &= ~(0x1F << 1);
+    val |= (0x39 << 1) | 1; /* 512MB */
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 2" :: "r"(val));
+
+    __asm volatile ("mrc p15, 0, %0, c6, c1, 4" : "=r"(val));
+    val |= (1 << 12);       /* XN */
+    val |= (0x3 << 8);      /* Full access */
+    val |= (0x0 << 3);      /* Device */
+    val |= (0x1 << 0);      /* Non cacheable */
+    __asm volatile ("mcr p15, 0, %0, c6, c1, 4" :: "r"(val));
+
+    /* =========================
+     * Enable MPU
+     * ========================= */
+    val = cp15_read_sctlr();
+    val |= (1 << 0);
+    cp15_write_sctlr(val);
+
+    dsb();
+    isb();
 }
 
 /**
@@ -127,19 +244,19 @@ void enable_caches(void)
     uint32_t sctlr;
     
     /* Enable I-Cache */
-    sctlr = read_sctlr();
+    sctlr = cp15_read_sctlr();
     sctlr |= (1 << 12);  /* Set I bit */
-    write_sctlr(sctlr);
-    
+    cp15_write_sctlr(sctlr);
+
     /* Enable D-Cache */
-    sctlr = read_sctlr();
+    sctlr = cp15_read_sctlr();
     sctlr |= (1 << 2);   /* Set C bit */
-    write_sctlr(sctlr);
-    
+    cp15_write_sctlr(sctlr);
+
     /* Enable Branch Prediction */
-    sctlr = read_sctlr();
+    sctlr = cp15_read_sctlr();
     sctlr |= (1 << 11);  /* Set Z bit */
-    write_sctlr(sctlr);
+    cp15_write_sctlr(sctlr);
 }
 
 /**
