@@ -1,145 +1,158 @@
 /**
  * @file uart.c
- * @brief UART Driver Implementation (with QEMU semihosting support)
+ * @brief UART + Logging for BootROM (QEMU + HW)
  */
 
 #include "uart.h"
-#include "platform/platform.h"
 
-/* For QEMU semihosting support */
+/* ============================================================
+ * QEMU semihosting
+ * ============================================================ */
+#ifdef ENABLE_QEMU_SEMIHOSTING
+
 #define SEMIHOSTING_SVC 0xAB
-#define SYS_WRITEC 0x03  /* Write character to console */
-#define SYS_WRITE0 0x04  /* Write string to console */
+#define SYS_WRITEC 0x03
+#define SYS_WRITE0 0x04
 
-/* Semihosting function for QEMU */
-static inline int semihosting_call(int operation, void *parameter)
+static inline int semihosting_call(int op, void *arg)
 {
-    int result;
+    int ret;
     __asm__ volatile (
         "mov r0, %1\n"
         "mov r1, %2\n"
         "svc %3\n"
         "mov %0, r0\n"
-        : "=r" (result)
-        : "r" (operation), "r" (parameter), "i" (SEMIHOSTING_SVC)
+        : "=r"(ret)
+        : "r"(op), "r"(arg), "i"(SEMIHOSTING_SVC)
         : "r0", "r1", "memory"
     );
-    return result;
+    return ret;
 }
 
-/* UART register definitions (stub - actual values depend on SoC) */
+#endif
+
+/* ============================================================
+ * UART registers
+ * ============================================================ */
 typedef struct {
-    volatile uint32_t DR;      /* Data Register */
-    volatile uint32_t RSR;     /* Receive Status Register */
-    volatile uint32_t RESERVED[4];
-    volatile uint32_t FR;      /* Flag Register */
-    volatile uint32_t RESERVED2[1];
-    volatile uint32_t ILPR;    /* IrDA Low-Power Counter */
-    volatile uint32_t IBRD;    /* Integer Baud Rate Divisor */
-    volatile uint32_t FBRD;    /* Fractional Baud Rate Divisor */
-    volatile uint32_t LCR_H;   /* Line Control Register */
-    volatile uint32_t CR;      /* Control Register */
+    volatile uint32_t DR;
+    volatile uint32_t RSR;
+    uint32_t RESERVED0[4];
+    volatile uint32_t FR;
+    uint32_t RESERVED1;
+    volatile uint32_t ILPR;
+    volatile uint32_t IBRD;
+    volatile uint32_t FBRD;
+    volatile uint32_t LCR_H;
+    volatile uint32_t CR;
 } uart_regs_t;
 
-#define UART_REG(reg) ((uart_regs_t *)UART0_BASE)->reg
+#define UART ((uart_regs_t *)UART0_BASE)
 
-/* Flag Register bits */
-#define UART_FR_TXFF  (1 << 5)  /* Transmit FIFO Full */
-#define UART_FR_RXFE  (1 << 4)  /* Receive FIFO Empty */
+#define UART_FR_TXFF (1 << 5)
+#define UART_FR_RXFE (1 << 4)
 
+/* ============================================================
+ * Internal state
+ * ============================================================ */
+static log_level_t g_log_level = LOG_LEVEL_INFO;
+
+/* ============================================================
+ * UART low level
+ * ============================================================ */
 int uart_init(uint32_t baudrate)
 {
-    /* Stub implementation - platform-specific UART initialization */
-    /* In real implementation:
-     * - Enable UART clock
-     * - Configure pins
-     * - Set baud rate
-     * - Enable UART
-     */
-    
     (void)baudrate;
+
+#ifndef ENABLE_QEMU_SEMIHOSTING
+    /* TODO: real SoC init:
+     * - enable clock
+     * - pinmux
+     * - set baud
+     * - enable TX/RX
+     */
+#endif
     return 0;
 }
 
 void uart_putchar(char c)
 {
-#ifdef QEMU_SEMIHOSTING
-    /* Use semihosting for QEMU output */
+#ifdef ENABLE_QEMU_SEMIHOSTING
     semihosting_call(SYS_WRITEC, &c);
 #else
-    /* Hardware UART implementation */
-    /* Wait until transmit FIFO is not full */
-    while (UART_REG(FR) & UART_FR_TXFF);
-    
-    /* Send character */
-    UART_REG(DR) = c;
+    while (UART->FR & UART_FR_TXFF);
+    UART->DR = (uint32_t)c;
 #endif
-    
-    /* If newline, send carriage return too */
+
     if (c == '\n') {
         uart_putchar('\r');
     }
 }
 
-void uart_puts(const char *str)
+void uart_puts(const char *s)
 {
-#ifdef QEMU_SEMIHOSTING
-    /* Use semihosting for QEMU output */
-    semihosting_call(SYS_WRITE0, (void *)str);
+#ifdef ENABLE_QEMU_SEMIHOSTING
+    semihosting_call(SYS_WRITE0, (void *)s);
 #else
-    while (*str) {
-        uart_putchar(*str++);
+    while (*s) {
+        uart_putchar(*s++);
     }
 #endif
 }
 
 char uart_getchar(void)
 {
-    /* Wait until receive FIFO is not empty */
-    while (UART_REG(FR) & UART_FR_RXFE);
-    
-    /* Read character */
-    return (char)(UART_REG(DR) & 0xFF);
+#ifndef ENABLE_QEMU_SEMIHOSTING
+    while (UART->FR & UART_FR_RXFE);
+    return (char)(UART->DR & 0xFF);
+#else
+    return 0;
+#endif
 }
 
-/* Simple printf implementation (very basic) */
-static void uart_put_uint32(uint32_t val)
+/* ============================================================
+ * Minimal printf
+ * ============================================================ */
+static void uart_put_hex(uint32_t v)
 {
-    char buffer[12];
+    const char *hex = "0123456789ABCDEF";
+    for (int i = 28; i >= 0; i -= 4) {
+        uart_putchar(hex[(v >> i) & 0xF]);
+    }
+}
+
+static void uart_put_dec(uint32_t v)
+{
+    char buf[12];
     int i = 0;
-    
-    if (val == 0) {
+
+    if (v == 0) {
         uart_putchar('0');
         return;
     }
-    
-    while (val > 0) {
-        buffer[i++] = '0' + (val % 10);
-        val /= 10;
+
+    while (v) {
+        buf[i++] = '0' + (v % 10);
+        v /= 10;
     }
-    
-    while (i > 0) {
-        uart_putchar(buffer[--i]);
-    }
+
+    while (i--) uart_putchar(buf[i]);
 }
 
-void uart_printf(const char *format, ...)
+void uart_printf(const char *fmt, ...)
 {
-    const char *p = format;
-    
-    /* Very simple implementation - only supports %s, %d, %x */
+    const char *p = fmt;
+
     while (*p) {
-        if (*p == '%' && *(p + 1)) {
+        if (*p == '%' && *(p+1)) {
             p++;
             if (*p == 's') {
-                /* String argument - stub */
+                uart_puts("(str)");
             } else if (*p == 'd' || *p == 'u') {
-                /* Integer argument - stub */
-                uart_put_uint32(0);
+                uart_put_dec(0);
             } else if (*p == 'x') {
-                /* Hex argument - stub */
                 uart_puts("0x");
-                uart_put_uint32(0);
+                uart_put_hex(0);
             } else {
                 uart_putchar('%');
                 uart_putchar(*p);
@@ -149,4 +162,36 @@ void uart_printf(const char *format, ...)
         }
         p++;
     }
+}
+
+/* ============================================================
+ * Logging system
+ * ============================================================ */
+void log_set_level(log_level_t lvl)
+{
+    g_log_level = lvl;
+}
+
+static const char *log_prefix[] = {
+    "[E] ",
+    "[W] ",
+    "[I] ",
+    "[D] ",
+};
+
+void log_printf(log_level_t lvl, const char *fmt, ...)
+{
+#if defined(BOOTROM_DEV_MODE)
+
+    if (lvl > g_log_level)
+        return;
+
+    uart_puts(log_prefix[lvl]);
+    uart_puts(fmt);
+    uart_puts("\n");
+
+#else
+    (void)lvl;
+    (void)fmt;
+#endif
 }

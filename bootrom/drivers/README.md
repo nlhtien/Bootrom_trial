@@ -1,24 +1,17 @@
 # Hardware Drivers
 
-This directory contains stub implementations of hardware drivers used by the BootROM.
+This directory contains implementations of hardware drivers used by the BootROM.
 
 ## Contents
 
-- `flash.c/h`: Flash memory driver (QSPI/NAND interface)
-- `uart.c/h`: UART driver for debugging output
-- `watchdog.c/h`: Watchdog timer driver
-
-## Implementation Notes
-
-These are currently stub implementations. In production:
-- Flash driver should interface with the actual flash controller
-- UART driver should configure hardware UART peripherals
-- Watchdog driver should control the hardware watchdog timer
+- `flash.c/h`: Basic Flash memory driver (QSPI/NAND interface)
+- `sd.c/h`: Basic SD memory driver (SD Card interface)
+- `uart.c/h`: UART driver for debugging output (QEMU and HW)
+- `watchdog.c/h`: Basic Watchdog timer driver
 
 ## Usage
 
 Drivers are initialized in `main.c` and used for:
-- Reading boot images from flash
-- Outputting debug messages via UART
-- Managing watchdog resets</content>
-<parameter name="filePath">/home/kora/tiennlh/project/Bootrom_trial/bootrom/drivers/README.md
+- Reading boot images from flash/SD
+- Outputting debug messages via UART/QEMU
+- Managing watchdog resets
