@@ -1,6 +1,6 @@
 /**
  * @file crypto_wrapper.h
- * @brief Crypto Wrapper API Header
+ * @brief BootROM Crypto Abstraction Layer Header
  */
 
 #ifndef CRYPTO_WRAPPER_H
@@ -9,66 +9,143 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ===================================================================== */
+/* Status & Definitions                                                  */
+/* ===================================================================== */
+
 /**
- * @brief Initialize crypto subsystem
- * @return 0 on success, negative on failure
+ * @brief Crypto Return Codes
+ */
+typedef enum {
+    CRYPTO_RC_OK                =  0,  /**< Operation successful */
+    CRYPTO_RC_FAIL              = -1,  /**< Generic failure */
+    CRYPTO_RC_INVALID_ARG       = -2,  /**< Invalid argument (NULL ptr, bad len) */
+    CRYPTO_RC_AUTH_FAIL         = -3,  /**< Signature/Tag verification failed */
+    CRYPTO_RC_BUFFER_TOO_SMALL  = -4,  /**< Output buffer too small */
+    CRYPTO_RC_HW_BUSY           = -5,  /**< Hardware engine busy/timeout */
+    CRYPTO_RC_NOT_SUPPORTED     = -6,  /**< Algorithm/Feature disabled in config */
+    CRYPTO_RC_KEY_ERROR         = -7   /**< Key invalid or missing */
+} crypto_rc_t;
+
+/**
+ * @brief Supported Signature Algorithms for Unified API
+ */
+typedef enum {
+    CRYPTO_ALG_RSA_SHA256 = 0x01,
+    CRYPTO_ALG_RSA_SHA384 = 0x02,
+    CRYPTO_ALG_ECDSA_SHA256 = 0x03,
+    CRYPTO_ALG_ECDSA_SHA384 = 0x04
+} crypto_algo_t;
+
+/* ===================================================================== */
+/* Lifecycle & Utilities                                                 */
+/* ===================================================================== */
+
+/**
+ * @brief Initialize crypto subsystem.
  */
 int crypto_init(void);
 
 /**
- * @brief Cleanup crypto subsystem
+ * @brief Deinitialize crypto subsystem and secure zeroize contexts.
  */
 void crypto_cleanup(void);
 
 /**
- * @brief Compute SHA-256 hash
- * @param input Input data
- * @param input_len Length of input data
- * @param output Output buffer (32 bytes)
- * @return 0 on success, negative on failure
+ * @brief Securely zeroize memory (prevents compiler optimization).
  */
-int crypto_hash_sha256(const uint8_t *input, size_t input_len, uint8_t *output);
+void crypto_secure_zeroize(void *buf, size_t len);
+
+/* ===================================================================== */
+/* Hashing                                                               */
+/* ===================================================================== */
+
+int crypto_hash_sha256(const uint8_t *input, size_t input_len, uint8_t *output32);
+int crypto_hash_sha384(const uint8_t *input, size_t input_len, uint8_t *output48);
+
+/* ===================================================================== */
+/* Symmetric Crypto (AES)                                                */
+/* ===================================================================== */
 
 /**
- * @brief AES-CBC decryption
- * @param encrypted Input encrypted data
- * @param decrypted Output decrypted data
- * @param len Length of data (must be multiple of 16)
- * @param iv Initialization vector (16 bytes)
- * @return 0 on success, negative on failure
+ * @brief AES-256-CBC Decryption (Legacy/Basic).
  */
-int crypto_aes_decrypt(const uint8_t *encrypted,
-                        uint8_t *decrypted,
-                        size_t len,
-                        const uint8_t *iv);
+int crypto_aes256_cbc_decrypt(const uint8_t *key,
+                              const uint8_t *iv,
+                              const uint8_t *encrypted,
+                              uint8_t *decrypted,
+                              size_t len);
 
 /**
- * @brief Verify RSA or ECC signature
- * @param hash Hash of the data (32 bytes for SHA-256)
- * @param hash_len Length of hash
- * @param signature Signature to verify
- * @param signature_len Length of signature
- * @return 0 on success, negative on failure
+ * @brief AES-256-GCM Decryption (Authenticated Encryption).
+ * @note Recommended for Secure Boot Images.
  */
-int crypto_verify_signature(const uint8_t *hash,
-                             size_t hash_len,
-                             const uint8_t *signature,
-                             size_t signature_len);
+int crypto_aes256_gcm_decrypt(const uint8_t *key,
+                              const uint8_t *iv, size_t iv_len,
+                              const uint8_t *add, size_t add_len,
+                              const uint8_t *tag, size_t tag_len,
+                              const uint8_t *encrypted,
+                              uint8_t *decrypted,
+                              size_t len);
 
 /**
- * @brief Load AES key (stub - should come from secure storage)
- * @param key Pointer to key data
- * @param key_len Key length in bytes (16, 24, or 32)
- * @return 0 on success, negative on failure
+ * @brief AES-256-CBC Decryption using Hardware Key Slot.
  */
-int crypto_set_aes_key(const uint8_t *key, size_t key_len);
+int crypto_aes256_cbc_decrypt_keyslot(int keyslot,
+                                      const uint8_t *iv,
+                                      const uint8_t *encrypted,
+                                      uint8_t *decrypted,
+                                      size_t len);
+
+/* ===================================================================== */
+/* RNG & Key Management                                                  */
+/* ===================================================================== */
 
 /**
- * @brief Load public key (stub - should come from secure storage)
- * @param key_der Public key in DER format
- * @param key_len Length of key data
- * @return 0 on success, negative on failure
+ * @brief Get random bytes from TRNG hardware.
  */
-int crypto_set_public_key(const uint8_t *key_der, size_t key_len);
+int crypto_rng_get_bytes(uint8_t *buf, size_t len);
+
+/**
+ * @brief Unwrap an encrypted key blob directly into a HW keyslot.
+ */
+int crypto_key_derive_blob(const uint8_t *wrapped_key, size_t wrapped_len, int dest_keyslot);
+
+/* ===================================================================== */
+/* Verification & Asymmetric                                             */
+/* ===================================================================== */
+
+/**
+ * @brief Unified Signature Verification API.
+ * @details Dispatches to specific implementation based on algo ID and build config.
+ */
+int crypto_verify_signature(crypto_algo_t algo,
+                            const uint8_t *hash, size_t hash_len,
+                            const uint8_t *signature, size_t sig_len,
+                            const uint8_t *pubkey, size_t pubkey_len);
+
+/**
+ * @brief Verify SHA-256 hash of a Public Key (Root of Trust Check).
+ */
+int crypto_verify_pubkey_hash_sha256(const uint8_t *pubkey, size_t pubkey_len, const uint8_t *expected_hash32);
+
+/**
+ * @brief Verify SHA-384 hash of a Public Key (Root of Trust Check).
+ */
+int crypto_verify_pubkey_hash_sha384(const uint8_t *pubkey, size_t pubkey_len, const uint8_t *expected_hash48);
+
+/* --- Primitive APIs (Direct calls if needed) --- */
+int crypto_rsa_verify_sha256(const uint8_t *hash32, const uint8_t *signature, size_t sig_len, const uint8_t *pubkey, size_t pubkey_len);
+int crypto_rsa_verify_sha384(const uint8_t *hash48, const uint8_t *signature, size_t sig_len, const uint8_t *pubkey, size_t pubkey_len);
+int crypto_ecdsa_verify_sha256(const uint8_t *hash32, const uint8_t *signature, size_t sig_len, const uint8_t *pubkey, size_t pubkey_len);
+int crypto_ecdsa_verify_sha384(const uint8_t *hash48, const uint8_t *signature, size_t sig_len, const uint8_t *pubkey, size_t pubkey_len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CRYPTO_WRAPPER_H */
